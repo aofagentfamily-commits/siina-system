@@ -1,16 +1,16 @@
 'use strict';
-// Email OTP login (6 digits, 5 min, single use, attempt-limited) + server-side sessions.
+// Email + password login. The first visit for an allowed email asks the user to set a password once;
+// after that the normal sign-in is used. Sessions are server-side and stored as hashes.
 const crypto = require('crypto');
 const { db } = require('./db');
 const u = require('./util');
-const mailer = require('./mailer');
 
-const OTP_TTL_MS = 5 * 60 * 1000;
-const OTP_MAX_ATTEMPTS = 5;
-const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
-const OTP_MAX_PER_15_MIN = 5;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const COOKIE_NAME = 'siina_sid';
+const MIN_PASSWORD_LENGTH = 10;
+const MAX_FAILED_LOGINS = 5;
+const LOCK_MS = 15 * 60 * 1000;
+const failedLogins = new Map(); // email -> { count, lockedUntil }  (in memory, per process)
 
 function allowedEmails() {
   return (process.env.ALLOWED_EMAILS || '')
@@ -19,92 +19,47 @@ function allowedEmails() {
     .filter(Boolean);
 }
 
-function otpHash(email, code) {
-  return u.hmac(u.appSecret(), `otp:${email}:${code}`);
-}
-
-function requestOtp(rawEmail, ip) {
-  const email = u.email(rawEmail);
+function assertAllowed(email) {
   if (!allowedEmails().includes(email)) {
     throw new u.HttpError(403, 'อีเมลนี้ยังไม่ได้รับอนุญาตให้เข้าระบบ', 'EMAIL_NOT_ALLOWED');
   }
-  if (!mailer.isConfigured()) {
-    throw new u.HttpError(503, 'ระบบส่งอีเมลยังไม่พร้อมใช้งาน กรุณาติดต่อผู้ดูแลระบบ', 'MAIL_NOT_CONFIGURED');
-  }
-  u.rateLimit(`otp-ip:${ip}`, 20, 15 * 60 * 1000);
-
-  const last = db.prepare('SELECT created_at FROM otp_requests WHERE email = ? ORDER BY created_at DESC LIMIT 1').get(email);
-  if (last) {
-    const wait = OTP_RESEND_COOLDOWN_MS - (Date.now() - new Date(last.created_at).getTime());
-    if (wait > 0) {
-      throw new u.HttpError(429, `กรุณารอ ${Math.ceil(wait / 1000)} วินาทีก่อนขอรหัสใหม่`, 'OTP_COOLDOWN', Math.ceil(wait / 1000));
-    }
-  }
-  const since = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-  const count = db.prepare('SELECT COUNT(*) AS c FROM otp_requests WHERE email = ? AND created_at > ?').get(email, since).c;
-  if (count >= OTP_MAX_PER_15_MIN) {
-    throw new u.HttpError(429, 'ขอรหัส OTP บ่อยเกินไป กรุณาลองใหม่ภายหลัง', 'OTP_LIMIT', 15 * 60);
-  }
-
-  const code = crypto.randomInt(0, 1000000).toString().padStart(6, '0');
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + OTP_TTL_MS).toISOString();
-  // Invalidate older unused codes so only the latest one works.
-  db.prepare('UPDATE otp_requests SET used_at = ? WHERE email = ? AND used_at IS NULL').run(now.toISOString(), email);
-  const id = u.uid();
-  db.prepare('INSERT INTO otp_requests (id, email, code_hash, expires_at, attempts, created_at) VALUES (?,?,?,?,0,?)')
-    .run(id, email, otpHash(email, code), expiresAt, now.toISOString());
-
-  // Send asynchronously; the caller awaits this via the returned promise.
-  return mailer.sendOtp(email, code, OTP_TTL_MS / 60000).then(
-    () => ({ expiresAt, resendAfterSeconds: OTP_RESEND_COOLDOWN_MS / 1000 }),
-    (err) => {
-      db.prepare('UPDATE otp_requests SET used_at = ? WHERE id = ?').run(new Date().toISOString(), id);
-      u.logError('OTP mail failed: ' + err.message, 'auth.requestOtp');
-      throw new u.HttpError(502, 'ไม่สามารถส่งอีเมลได้ กรุณาลองใหม่อีกครั้ง', 'MAIL_FAILED');
-    },
-  );
 }
 
-function verifyOtp(rawEmail, rawCode, ip, userAgent) {
-  const email = u.email(rawEmail);
-  const code = String(rawCode || '').trim();
-  if (!/^\d{6}$/.test(code)) throw new u.HttpError(400, 'กรุณากรอกรหัส OTP 6 หลัก', 'VALIDATION');
-  u.rateLimit(`otp-verify-ip:${ip}`, 30, 15 * 60 * 1000);
+// scrypt with a random salt; stored as "scrypt$<salt>$<key>".
+const SCRYPT = { N: 16384, r: 8, p: 1 };
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16);
+  const key = crypto.scryptSync(password, salt, 64, SCRYPT);
+  return `scrypt$${salt.toString('base64')}$${key.toString('base64')}`;
+}
+function verifyPassword(password, stored) {
+  const [scheme, saltB64, keyB64] = String(stored || '').split('$');
+  if (scheme !== 'scrypt' || !saltB64 || !keyB64) return false;
+  const key = crypto.scryptSync(password, Buffer.from(saltB64, 'base64'), 64, SCRYPT);
+  return u.safeEqual(key.toString('base64'), keyB64);
+}
 
-  const row = db.prepare(
-    'SELECT * FROM otp_requests WHERE email = ? AND used_at IS NULL ORDER BY created_at DESC LIMIT 1',
-  ).get(email);
-  if (!row || new Date(row.expires_at) < new Date()) {
-    throw new u.HttpError(400, 'รหัส OTP หมดอายุหรือไม่ถูกต้อง กรุณาขอรหัสใหม่', 'OTP_EXPIRED');
-  }
-  if (row.attempts >= OTP_MAX_ATTEMPTS) {
-    db.prepare('UPDATE otp_requests SET used_at = ? WHERE id = ?').run(new Date().toISOString(), row.id);
-    throw new u.HttpError(429, 'กรอกรหัสผิดเกินกำหนด กรุณาขอรหัสใหม่', 'OTP_LOCKED');
-  }
-  const attempts = row.attempts + 1;
-  db.prepare('UPDATE otp_requests SET attempts = ? WHERE id = ?').run(attempts, row.id);
-  if (!u.safeEqual(row.code_hash, otpHash(email, code))) {
-    const left = OTP_MAX_ATTEMPTS - attempts;
-    throw new u.HttpError(400, `รหัส OTP ไม่ถูกต้อง (เหลือ ${left} ครั้ง)`, 'OTP_INVALID');
-  }
-  db.prepare('UPDATE otp_requests SET used_at = ? WHERE id = ?').run(new Date().toISOString(), row.id);
-
-  const user = upsertUser(email);
-  const token = createSession(user.id, userAgent);
-  db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), user.id);
-  u.activity(user.id, 'login', 'session', null, 'เข้าสู่ระบบด้วย OTP');
-  return { token, user };
+function findUser(email) {
+  return db.prepare('SELECT * FROM users WHERE email = ?').get(email) || null;
 }
 
 function upsertUser(email) {
-  const existing = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+  const existing = findUser(email);
   if (existing) return existing;
   const now = u.nowIso();
   const id = u.uid();
   db.prepare('INSERT INTO users (id, email, display_name, created_at, updated_at) VALUES (?,?,?,?,?)')
     .run(id, email, email.split('@')[0], now, now);
-  return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  return findUser(email);
+}
+
+// Tells the login page whether this allowed email still needs its one-time password setup.
+function checkEmail(rawEmail, ip) {
+  u.rateLimit(`auth-check-ip:${ip}`, 60, 15 * 60 * 1000);
+  const email = u.email(rawEmail);
+  assertAllowed(email);
+  const user = findUser(email);
+  return { mode: user && user.password_hash ? 'login' : 'setup' };
 }
 
 function createSession(userId, userAgent) {
@@ -114,6 +69,68 @@ function createSession(userId, userAgent) {
     .run(u.uid(), userId, u.sha256(token), now.toISOString(), new Date(now.getTime() + SESSION_TTL_MS).toISOString(),
       String(userAgent || '').slice(0, 200));
   return token;
+}
+
+// One-time: sets the password for an allowed email that has none yet.
+function setupPassword(rawEmail, password, confirm, ip, userAgent) {
+  u.rateLimit(`auth-setup-ip:${ip}`, 10, 15 * 60 * 1000);
+  const email = u.email(rawEmail);
+  assertAllowed(email);
+  const pw = String(password || '');
+  if (pw.length < MIN_PASSWORD_LENGTH) {
+    throw new u.HttpError(400, `รหัสผ่านต้องมีอย่างน้อย ${MIN_PASSWORD_LENGTH} ตัวอักษร`, 'WEAK_PASSWORD');
+  }
+  if (pw.length > 200) throw new u.HttpError(400, 'รหัสผ่านยาวเกินไป', 'VALIDATION');
+  if (pw !== String(confirm || '')) throw new u.HttpError(400, 'รหัสผ่านสองช่องไม่ตรงกัน', 'MISMATCH');
+
+  const user = upsertUser(email);
+  if (user.password_hash) {
+    throw new u.HttpError(409, 'บัญชีนี้ตั้งรหัสผ่านแล้ว กรุณาเข้าสู่ระบบด้วยรหัสผ่าน', 'ALREADY_SET');
+  }
+  // Atomic: only succeeds while no password is stored yet.
+  const result = db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ? AND password_hash IS NULL')
+    .run(hashPassword(pw), u.nowIso(), user.id);
+  if (!result.changes) throw new u.HttpError(409, 'บัญชีนี้ตั้งรหัสผ่านแล้ว กรุณาเข้าสู่ระบบด้วยรหัสผ่าน', 'ALREADY_SET');
+
+  const token = createSession(user.id, userAgent);
+  db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(u.nowIso(), user.id);
+  u.activity(user.id, 'setup', 'account', user.id, 'ตั้งรหัสผ่านครั้งแรก');
+  return { token, user: findUser(email) };
+}
+
+function login(rawEmail, password, ip, userAgent) {
+  u.rateLimit(`auth-login-ip:${ip}`, 30, 15 * 60 * 1000);
+  const email = u.email(rawEmail);
+  assertAllowed(email);
+  const pw = String(password || '');
+  if (!pw) throw new u.HttpError(400, 'กรุณากรอกรหัสผ่าน', 'VALIDATION');
+
+  const state = failedLogins.get(email) || { count: 0, lockedUntil: 0 };
+  if (state.lockedUntil > Date.now()) {
+    const wait = Math.ceil((state.lockedUntil - Date.now()) / 1000);
+    throw new u.HttpError(429, `กรอกรหัสผ่านผิดหลายครั้ง กรุณารอ ${Math.ceil(wait / 60)} นาทีแล้วลองใหม่`, 'LOCKED', wait);
+  }
+
+  const user = findUser(email);
+  if (!user || !user.password_hash) {
+    throw new u.HttpError(400, 'ยังไม่ได้ตั้งรหัสผ่าน กรุณาตั้งรหัสผ่านก่อนเข้าสู่ระบบ', 'SETUP_REQUIRED');
+  }
+  if (!verifyPassword(pw, user.password_hash)) {
+    state.count += 1;
+    if (state.count >= MAX_FAILED_LOGINS) {
+      state.lockedUntil = Date.now() + LOCK_MS;
+      state.count = 0;
+    }
+    failedLogins.set(email, state);
+    u.activity(user.id, 'login_failed', 'session', null, 'รหัสผ่านไม่ถูกต้อง');
+    throw new u.HttpError(401, 'อีเมลหรือรหัสผ่านไม่ถูกต้อง', 'INVALID_CREDENTIALS');
+  }
+
+  failedLogins.delete(email);
+  const token = createSession(user.id, userAgent);
+  db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(u.nowIso(), user.id);
+  u.activity(user.id, 'login', 'session', null, 'เข้าสู่ระบบ');
+  return { token, user };
 }
 
 function userFromToken(token) {
@@ -144,6 +161,6 @@ function sessionCookie(token, maxAgeSeconds) {
 }
 
 module.exports = {
-  COOKIE_NAME, requestOtp, verifyOtp, userFromToken, revokeToken, readCookie, sessionCookie,
-  allowedEmails, OTP_TTL_MS,
+  COOKIE_NAME, checkEmail, setupPassword, login, userFromToken, revokeToken, readCookie, sessionCookie,
+  allowedEmails, MIN_PASSWORD_LENGTH,
 };

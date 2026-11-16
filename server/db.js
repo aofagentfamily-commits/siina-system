@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_data TEXT,
   timezone TEXT NOT NULL DEFAULT 'Asia/Bangkok',
   telegram_user_id TEXT,
+  password_hash TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   last_login_at TEXT
@@ -217,5 +218,12 @@ CREATE TABLE IF NOT EXISTS error_logs (
   created_at TEXT NOT NULL
 );
 `);
+
+// Migration for databases created before password login existed.
+try {
+  db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
+} catch (_) {
+  // column already exists
+}
 
 module.exports = { db, DATA_DIR };

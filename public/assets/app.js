@@ -53,8 +53,8 @@ async function boot() {
   if (!S.bellTimer) S.bellTimer = setInterval(refreshBell, 30000);
 }
 
-/* ---------------------------------------------------------------- login */
-S.login = { email: '', expiresAt: 0, resendAt: 0 };
+/* ---------------------------------------------------------------- login (email + password) */
+S.login = { email: '', mode: 'login' };
 
 function renderLogin() {
   if (S.bellTimer) { clearInterval(S.bellTimer); S.bellTimer = null; }
@@ -70,76 +70,14 @@ function renderLogin() {
       </div>
     </div>
   </div>`;
-  const stage = S.login.expiresAt && S.login.step === 'otp' ? 'otp' : 'email';
-  stage === 'otp' ? showOtpStage() : showEmailStage();
+  showEmailStage(S.login.email);
 }
 
 function setSteps(n) {
   $('#loginSteps').innerHTML = `
     <div class="step ${n >= 1 ? 'active' : ''}"><i>1</i>เข้าสู่ระบบ</div>
     <span class="bar ${n >= 2 ? 'on' : ''}"></span>
-    <div class="step ${n >= 2 ? 'active' : ''}"><i>2</i>ยืนยัน OTP</div>`;
-}
-
-function showEmailStage(prefill = '') {
-  clearLoginTimer();
-  S.login.step = 'email';
-  setSteps(1);
-  $('#loginStage').innerHTML = `
-    <h2>เข้าสู่ระบบด้วยอีเมล</h2>
-    <p class="sub">กรอกอีเมลเพื่อรับรหัส OTP</p>
-    <form data-form="login-email" novalidate>
-      <label class="field"><span class="sr-only">อีเมล</span>
-        <input class="input" type="email" name="email" autocomplete="email" inputmode="email" placeholder="กรอกอีเมลของคุณ" required value="${esc(prefill)}"></label>
-      <p class="small" data-role="login-error" role="alert" style="color:var(--danger);min-height:1.4em;margin-top:8px"></p>
-      <button class="btn primary block" type="submit">${icon('send')} ส่งรหัส OTP ไปยังอีเมล</button>
-    </form>
-    <div class="divider">หรือ</div>
-    <div class="otp-info">${icon('mail', 'lg')}<span>เราจะส่งรหัส OTP (6 หลัก) ไปยังอีเมลของคุณ เพื่อยืนยันตัวตนในการเข้าสู่ระบบ</span></div>`;
-  setTimeout(() => { const i = $('#loginStage input[name="email"]'); if (i) i.focus(); }, 30);
-}
-
-function showOtpStage() {
-  S.login.step = 'otp';
-  setSteps(2);
-  $('#loginStage').innerHTML = `
-    <h2>ยืนยันรหัส OTP</h2>
-    <p class="sub">ส่งรหัสไปที่ ${esc(S.login.email)} แล้ว</p>
-    <form data-form="login-otp" novalidate>
-      <div class="otp-boxes" role="group" aria-label="รหัส OTP 6 หลัก">
-        ${[0, 1, 2, 3, 4, 5].map((i) => `<input class="otp-digit" data-otp-box inputmode="numeric" autocomplete="${i === 0 ? 'one-time-code' : 'off'}" aria-label="หลักที่ ${i + 1}">`).join('')}
-      </div>
-      <p class="small muted" id="otpTimer" style="text-align:center;margin-top:8px"></p>
-      <p class="small" data-role="login-error" role="alert" style="color:var(--danger);min-height:1.4em;text-align:center"></p>
-      <button class="btn primary block" type="submit">${icon('check')} ยืนยันเข้าสู่ระบบ</button>
-      <div class="otp-meta">
-        <button type="button" class="btn sm ghost" data-action="login-change-email">${icon('chevLeft', 'sm')} เปลี่ยนอีเมล</button>
-        <button type="button" class="btn sm ghost" data-action="login-resend" id="resendBtn">ส่งรหัส OTP ใหม่</button>
-      </div>
-    </form>`;
-  startLoginTimer();
-  setTimeout(() => { const i = $('[data-otp-box]'); if (i) i.focus(); }, 30);
-}
-
-function clearLoginTimer() {
-  if (S.loginTimer) { clearInterval(S.loginTimer); S.loginTimer = null; }
-}
-function startLoginTimer() {
-  clearLoginTimer();
-  const tick = () => {
-    const timer = $('#otpTimer');
-    const btn = $('#resendBtn');
-    if (!timer || !btn) return clearLoginTimer();
-    const left = Math.max(0, Math.ceil((S.login.expiresAt - Date.now()) / 1000));
-    const cool = Math.max(0, Math.ceil((S.login.resendAt - Date.now()) / 1000));
-    timer.textContent = left > 0
-      ? `รหัสมีอายุอีก ${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')} นาที`
-      : 'รหัสหมดอายุแล้ว กรุณาขอรหัสใหม่';
-    btn.disabled = cool > 0;
-    btn.textContent = cool > 0 ? `ส่งรหัสใหม่ได้ใน ${cool} วินาที` : 'ส่งรหัส OTP ใหม่';
-  };
-  tick();
-  S.loginTimer = setInterval(tick, 1000);
+    <div class="step ${n >= 2 ? 'active' : ''}"><i>2</i>${S.login.mode === 'setup' ? 'ตั้งรหัสผ่าน' : 'รหัสผ่าน'}</div>`;
 }
 
 function loginError(form, message) {
@@ -147,101 +85,104 @@ function loginError(form, message) {
   if (el) el.textContent = message;
 }
 
-async function requestOtp(email) {
-  const r = await apiPost('/api/auth/otp/request', { email });
-  S.login.email = email;
-  S.login.expiresAt = new Date(r.expiresAt).getTime();
-  S.login.resendAt = Date.now() + r.resendAfterSeconds * 1000;
-  return r;
+function showEmailStage(prefill = '') {
+  S.login.mode = 'login';
+  setSteps(1);
+  $('#loginStage').innerHTML = `
+    <h2>เข้าสู่ระบบด้วยอีเมล</h2>
+    <p class="sub">กรอกอีเมลและรหัสผ่านของคุณ</p>
+    <form data-form="login-email" novalidate>
+      <label class="field"><span class="sr-only">อีเมล</span>
+        <input class="input" type="email" name="email" autocomplete="username" inputmode="email" placeholder="กรอกอีเมลของคุณ" required value="${esc(prefill)}"></label>
+      <p class="small" data-role="login-error" role="alert" style="color:var(--danger);min-height:1.4em;margin-top:8px"></p>
+      <button class="btn primary block" type="submit">${icon('send')} ถัดไป</button>
+    </form>
+    <div class="divider">หรือ</div>
+    <div class="otp-info">${icon('shield', 'lg')}<span>ครั้งแรกที่เข้าระบบ ให้ตั้งรหัสผ่านหนึ่งครั้ง หลังจากนั้นเข้าสู่ระบบด้วยอีเมลและรหัสผ่านตามปกติ</span></div>`;
+  setTimeout(() => { const i = $('#loginStage input[name="email"]'); if (i) i.focus(); }, 30);
+}
+
+function showPasswordStage() {
+  S.login.mode = 'login';
+  setSteps(2);
+  $('#loginStage').innerHTML = `
+    <h2>เข้าสู่ระบบ</h2>
+    <p class="sub">${esc(S.login.email)}</p>
+    <form data-form="login-password" novalidate>
+      <label class="field"><span class="sr-only">รหัสผ่าน</span>
+        <input class="input" type="password" name="password" autocomplete="current-password" placeholder="รหัสผ่าน" required></label>
+      <p class="small" data-role="login-error" role="alert" style="color:var(--danger);min-height:1.4em;margin-top:8px"></p>
+      <button class="btn primary block" type="submit">${icon('check')} เข้าสู่ระบบ</button>
+      <div class="otp-meta"><button type="button" class="btn sm ghost" data-action="login-change-email">${icon('chevLeft', 'sm')} เปลี่ยนอีเมล</button></div>
+    </form>`;
+  setTimeout(() => { const i = $('#loginStage input[name="password"]'); if (i) i.focus(); }, 30);
+}
+
+function showSetupStage() {
+  S.login.mode = 'setup';
+  setSteps(2);
+  $('#loginStage').innerHTML = `
+    <h2>ตั้งรหัสผ่านครั้งแรก</h2>
+    <p class="sub">${esc(S.login.email)} · อย่างน้อย 10 ตัวอักษร</p>
+    <form data-form="login-setup" novalidate>
+      <label class="field"><span class="sr-only">รหัสผ่านใหม่</span>
+        <input class="input" type="password" name="password" autocomplete="new-password" placeholder="รหัสผ่านใหม่" required minlength="10"></label>
+      <label class="field" style="margin-top:10px"><span class="sr-only">ยืนยันรหัสผ่าน</span>
+        <input class="input" type="password" name="confirm" autocomplete="new-password" placeholder="ยืนยันรหัสผ่านอีกครั้ง" required minlength="10"></label>
+      <p class="small" data-role="login-error" role="alert" style="color:var(--danger);min-height:1.4em;margin-top:8px"></p>
+      <button class="btn primary block" type="submit">${icon('check')} บันทึกรหัสผ่านและเข้าสู่ระบบ</button>
+      <div class="otp-meta"><button type="button" class="btn sm ghost" data-action="login-change-email">${icon('chevLeft', 'sm')} เปลี่ยนอีเมล</button></div>
+    </form>`;
+  setTimeout(() => { const i = $('#loginStage input[name="password"]'); if (i) i.focus(); }, 30);
+}
+
+async function enterAfterLogin(form) {
+  $('#loginStage').innerHTML = `<div style="text-align:center">${eggHtml({ cheer: true, size: 150 })}<h2 style="margin-top:12px">เข้าสู่ระบบสำเร็จ</h2></div>`;
+  toast('เข้าสู่ระบบสำเร็จ');
+  await sleep(1400);
+  await boot();
 }
 
 FORMS['login-email'] = async (form) => {
   const email = form.email.value.trim();
   const btn = form.querySelector('button[type="submit"]');
   try {
-    await busy(btn, () => requestOtp(email));
-    showOtpStage();
+    const r = await busy(btn, () => apiPost('/api/auth/check', { email }));
+    S.login.email = email;
+    if (r.mode === 'setup') showSetupStage(); else showPasswordStage();
   } catch (err) {
-    if (err.code === 'OTP_COOLDOWN' || err.code === 'OTP_LIMIT') {
-      // The code was already sent recently: continue to the code step.
-      S.login.email = email;
-      showOtpStage();
-      toast(err.message, 'err');
-      return;
-    }
     loginError(form, err.message);
   }
 };
 
-FORMS['login-otp'] = async (form) => {
-  const code = Array.from(form.querySelectorAll('[data-otp-box]')).map((i) => i.value).join('');
-  if (!/^\d{6}$/.test(code)) { loginError(form, 'กรุณากรอกรหัส OTP 6 หลัก'); return; }
+FORMS['login-password'] = async (form) => {
+  const password = form.password.value;
   const btn = form.querySelector('button[type="submit"]');
   try {
-    await busy(btn, () => apiPost('/api/auth/otp/verify', { email: S.login.email, code }));
-    clearLoginTimer();
-    $('#loginStage').innerHTML = `<div style="text-align:center">${eggHtml({ cheer: true, size: 150 })}<h2 style="margin-top:12px">เข้าสู่ระบบสำเร็จ</h2></div>`;
-    toast('เข้าสู่ระบบสำเร็จ');
-    await sleep(1600);
-    await boot();
+    await busy(btn, () => apiPost('/api/auth/login', { email: S.login.email, password }));
+    await enterAfterLogin(form);
   } catch (err) {
+    if (err.code === 'SETUP_REQUIRED') { showSetupStage(); toast(err.message, 'err'); return; }
     loginError(form, err.message);
-    if (err.code === 'OTP_EXPIRED' || err.code === 'OTP_LOCKED') S.login.expiresAt = 0;
-    form.querySelectorAll('[data-otp-box]').forEach((i) => { i.value = ''; });
-    const first = form.querySelector('[data-otp-box]');
-    if (first) first.focus();
+    form.password.value = '';
+    form.password.focus();
+  }
+};
+
+FORMS['login-setup'] = async (form) => {
+  const password = form.password.value;
+  const confirm = form.confirm.value;
+  const btn = form.querySelector('button[type="submit"]');
+  try {
+    await busy(btn, () => apiPost('/api/auth/setup', { email: S.login.email, password, confirm }));
+    await enterAfterLogin(form);
+  } catch (err) {
+    if (err.code === 'ALREADY_SET') { showPasswordStage(); toast(err.message, 'err'); return; }
+    loginError(form, err.message);
   }
 };
 
 ACTIONS['login-change-email'] = () => showEmailStage(S.login.email);
-ACTIONS['login-resend'] = async (el) => {
-  try {
-    await busy(el, () => requestOtp(S.login.email));
-    startLoginTimer();
-    toast('ส่งรหัส OTP ใหม่ไปยังอีเมลแล้ว');
-  } catch (err) {
-    toast(err.message, 'err');
-    if (err.code === 'OTP_COOLDOWN') { S.login.resendAt = Date.now() + 60000; startLoginTimer(); }
-  }
-};
-
-/* OTP boxes: digits only, auto-advance, backspace, and paste of the whole code. */
-document.addEventListener('input', (e) => {
-  const t = e.target;
-  if (t.matches && t.matches('[data-otp-box]')) {
-    const boxes = Array.from(t.closest('.otp-boxes').querySelectorAll('[data-otp-box]'));
-    const digits = t.value.replace(/\D/g, '');
-    if (digits.length > 1) {
-      // Autofill or a fast multi-character insert: spread the digits across the boxes.
-      const start = boxes.indexOf(t);
-      digits.slice(0, boxes.length - start).split('').forEach((d, i) => { boxes[start + i].value = d; });
-      boxes[Math.min(start + digits.length, boxes.length) - 1].focus();
-      return;
-    }
-    t.value = digits.slice(-1);
-    if (t.value) {
-      const next = t.nextElementSibling;
-      if (next && next.matches('[data-otp-box]')) next.focus();
-    }
-  }
-});
-document.addEventListener('keydown', (e) => {
-  const t = e.target;
-  if (t.matches && t.matches('[data-otp-box]') && e.key === 'Backspace' && !t.value) {
-    const prev = t.previousElementSibling;
-    if (prev && prev.matches('[data-otp-box]')) { prev.value = ''; prev.focus(); }
-  }
-});
-document.addEventListener('paste', (e) => {
-  const t = e.target;
-  if (!(t.matches && t.matches('[data-otp-box]'))) return;
-  e.preventDefault();
-  const digits = (e.clipboardData || window.clipboardData).getData('text').replace(/\D/g, '').slice(0, 6);
-  const boxes = Array.from(t.closest('.otp-boxes').querySelectorAll('[data-otp-box]'));
-  digits.split('').forEach((d, i) => { if (boxes[i]) boxes[i].value = d; });
-  const last = boxes[Math.min(digits.length, 6) - 1];
-  if (last) (boxes[digits.length] || last).focus();
-});
 
 /* ---------------------------------------------------------------- shell */
 function renderShell() {

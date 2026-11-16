@@ -60,42 +60,52 @@ test('unauthenticated API access is rejected', async () => {
   assert.equal(r.status, 401);
 });
 
-test('OTP: rejects emails that are not allowed', async () => {
-  const r = await api('POST', '/api/auth/otp/request', { email: 'stranger@example.com' });
+test('auth: email must be on the allowlist', async () => {
+  const r = await api('POST', '/api/auth/check', { email: 'stranger@example.com' });
   assert.equal(r.status, 403);
-  assert.equal(sent.length, 0);
 });
 
-test('OTP: rejects malformed email', async () => {
-  const r = await api('POST', '/api/auth/otp/request', { email: 'not-an-email' });
+test('auth: malformed email is rejected', async () => {
+  const r = await api('POST', '/api/auth/check', { email: 'not-an-email' });
   assert.equal(r.status, 400);
 });
 
-test('OTP: sends a 6-digit code by email and enforces resend cooldown', async () => {
-  const r = await api('POST', '/api/auth/otp/request', { email: 'Owner@Example.com' });
+test('auth: first visit asks for a one-time password setup', async () => {
+  const r = await api('POST', '/api/auth/check', { email: 'Owner@Example.com' });
   assert.equal(r.status, 200);
-  assert.equal(sent.length, 1);
-  assert.match(codeFromMail(), /^\d{6}$/);
-  // The OTP must never be returned to the browser.
-  assert.equal(JSON.stringify(r.body).includes(codeFromMail()), false);
-  const again = await api('POST', '/api/auth/otp/request', { email: 'owner@example.com' });
-  assert.equal(again.status, 429);
-  assert.equal(sent.length, 1);
+  assert.equal(r.body.mode, 'setup');
 });
 
-test('OTP: wrong code is rejected, correct code creates a session cookie', async () => {
-  const real = codeFromMail();
-  const wrong = real === '000000' ? '111111' : '000000';
-  const bad = await api('POST', '/api/auth/otp/verify', { email: 'owner@example.com', code: wrong });
-  assert.equal(bad.status, 400);
-  assert.match(bad.body.error, /เหลือ 4 ครั้ง/);
-  const ok = await api('POST', '/api/auth/otp/verify', { email: 'owner@example.com', code: real });
+test('auth: setup checks length and confirmation', async () => {
+  const short = await api('POST', '/api/auth/setup', { email: 'owner@example.com', password: 'short', confirm: 'short' });
+  assert.equal(short.status, 400);
+  const mismatch = await api('POST', '/api/auth/setup', { email: 'owner@example.com', password: 'long-enough-pass-1', confirm: 'long-enough-pass-2' });
+  assert.equal(mismatch.status, 400);
+});
+
+test('auth: setup stores the password once and starts a session', async () => {
+  const body = { email: 'owner@example.com', password: 'long-enough-pass-1', confirm: 'long-enough-pass-1' };
+  const r = await api('POST', '/api/auth/setup', body);
+  assert.equal(r.status, 200);
+  assert.ok(cookie.startsWith('siina_sid='));
+  assert.equal(r.body.user.email, 'owner@example.com');
+  const again = await api('POST', '/api/auth/setup', body);
+  assert.equal(again.status, 409);
+  const check = await api('POST', '/api/auth/check', { email: 'owner@example.com' });
+  assert.equal(check.body.mode, 'login');
+  // The password itself is never stored in plain text.
+  const row = db.prepare('SELECT password_hash FROM users WHERE email = ?').get('owner@example.com');
+  assert.ok(row.password_hash.startsWith('scrypt$'));
+  assert.ok(!row.password_hash.includes('long-enough-pass-1'));
+});
+
+test('auth: wrong password is rejected, correct password signs in', async () => {
+  await api('POST', '/api/auth/logout');
+  const bad = await api('POST', '/api/auth/login', { email: 'owner@example.com', password: 'wrong-password-xx' });
+  assert.equal(bad.status, 401);
+  const ok = await api('POST', '/api/auth/login', { email: 'owner@example.com', password: 'long-enough-pass-1' });
   assert.equal(ok.status, 200);
   assert.ok(cookie.startsWith('siina_sid='));
-  assert.equal(ok.body.user.email, 'owner@example.com');
-  // Single use: the same code cannot be used again.
-  const reuse = await api('POST', '/api/auth/otp/verify', { email: 'owner@example.com', code: real });
-  assert.equal(reuse.status, 400);
 });
 
 test('session persists across requests and profile is readable', async () => {
@@ -313,4 +323,12 @@ test('logout revokes the session', async () => {
   assert.equal(out.status, 200);
   const me = await api('GET', '/api/me');
   assert.equal(me.status, 401);
+});
+
+test('auth: repeated wrong passwords lock sign-in temporarily', async () => {
+  for (let i = 0; i < 5; i++) {
+    await api('POST', '/api/auth/login', { email: 'owner@example.com', password: 'wrong-password-xx' });
+  }
+  const locked = await api('POST', '/api/auth/login', { email: 'owner@example.com', password: 'long-enough-pass-1' });
+  assert.equal(locked.status, 429);
 });

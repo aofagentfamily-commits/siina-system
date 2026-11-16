@@ -18,9 +18,14 @@ function add(method, path, handler, opts = {}) {
 }
 
 // ---------------------------------------------------------------- auth
-add('POST', '/api/auth/otp/request', (c) => auth.requestOtp(c.body.email, c.ip), { auth: false });
-add('POST', '/api/auth/otp/verify', (c) => {
-  const { token, user } = auth.verifyOtp(c.body.email, c.body.code, c.ip, c.userAgent);
+add('POST', '/api/auth/check', (c) => auth.checkEmail(c.body.email, c.ip), { auth: false });
+add('POST', '/api/auth/setup', (c) => {
+  const { token, user } = auth.setupPassword(c.body.email, c.body.password, c.body.confirm, c.ip, c.userAgent);
+  c.setCookie(auth.sessionCookie(token, 7 * 24 * 60 * 60));
+  return { user: f.userDto(user) };
+}, { auth: false });
+add('POST', '/api/auth/login', (c) => {
+  const { token, user } = auth.login(c.body.email, c.body.password, c.ip, c.userAgent);
   c.setCookie(auth.sessionCookie(token, 7 * 24 * 60 * 60));
   return { user: f.userDto(user) };
 }, { auth: false });
