@@ -1137,3 +1137,17 @@ body[data-route="calendar"] .modal .close-x { color: var(--cal-ink); }
   .cal-bar { justify-content: center; padding: 3px; }
   .cal-theme .cal-dow { font-size: .72rem; padding: 8px 0; }
 }
+
+/* the calendar colour variables must also exist on dialogs opened from the calendar */
+body[data-route="calendar"] {
+  --cal-bg: #FFF7FB; --cal-card: #FFFFFF; --cal-head: #FFE5F0; --cal-pink: #FF4F9A; --cal-soft: #FFD6E8;
+  --cal-line: #F3D5E3; --cal-ink: #24202A; --cal-mute: #756A78;
+}
+body[data-route="calendar"] .modal, body[data-route="calendar"] .modal * { color: #24202A; }
+body[data-route="calendar"] .modal .btn.primary, body[data-route="calendar"] .modal .btn.primary * { color: #FFFFFF; }
+body[data-route="calendar"] .modal .btn.danger, body[data-route="calendar"] .modal .btn.danger * { color: #C0264E; }
+body[data-route="calendar"] .modal .muted, body[data-route="calendar"] .modal small.muted { color: #756A78; }
+body[data-route="calendar"] .modal .badge.pink { color: #B0296B; }
+body[data-route="calendar"] .modal .badge.pink, body[data-route="calendar"] .modal .badge.ok { color: #6B1F45; }
+body[data-route="calendar"] .modal .badge.ok { color: #1A6B47; }
+body[data-route="calendar"] .modal .btn.primary { color: #FFFFFF; }
