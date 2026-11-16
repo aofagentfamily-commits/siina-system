@@ -481,7 +481,7 @@ async function renderCalendar(params) {
   }
 
   fillPage(`
-    <div class="cal-layout">
+    <div class="cal-theme"><div class="cal-layout">
       <aside class="cal-side">
         <div class="card">
           <h3 style="margin-bottom:10px">มุมมองปฏิทิน</h3>
@@ -523,18 +523,19 @@ async function renderCalendar(params) {
             </tr>`).join('')}</tbody></table></div>` : emptyBox('ไม่มีรายการในแท็บนี้')}
         </div>
       </section>
-    </div>`);
+    </div></div>`);
 }
 
 function calCell(d, month, today) {
   const k = isoDate(d);
   const list = S.cal.byDate[k] || [];
-  const shown = list.slice(0, 3);
+  const shown = list.slice(0, 2);
   const more = list.length - shown.length;
-  return `<div class="cal-cell ${d.getMonth() !== month ? 'other' : ''} ${k === today ? 'today' : ''} ${d.getDay() === 0 ? 'sun' : ''} ${k === (S.cal.selected || '') ? 'selected' : ''}"
+  const weekend = d.getDay() === 0 || d.getDay() === 6;
+  return `<div class="cal-cell ${d.getMonth() !== month ? 'other' : ''} ${k === today ? 'today' : ''} ${weekend ? 'weekend' : ''} ${k === (S.cal.selected || '') ? 'selected' : ''}"
       role="gridcell" tabindex="0" data-action="cal-day" data-date="${k}" aria-label="${esc(thaiDate(k, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}, ${list.length} รายการ">
     <span class="num">${d.getDate()}</span>
-    <div class="cal-syms">${shown.map((e) => `<button class="cal-sym" style="color:${safeColor(e.color)}" data-action="event-detail" data-id="${esc(e.id)}" title="${esc(e.title)}" aria-label="${esc(e.title)}">${icon(e.symbol)}</button>`).join('')}</div>
+    <div class="cal-bars">${shown.map((e) => `<button class="cal-bar cat-${esc(e.category)}" data-action="event-detail" data-id="${esc(e.id)}" title="${esc(e.title)}" aria-label="${esc(e.title)}">${icon(e.symbol, 'sm')}<span>${esc(e.title)}</span></button>`).join('')}</div>
     ${more > 0 ? `<span class="cal-more">+${more} รายการ</span>` : ''}
   </div>`;
 }

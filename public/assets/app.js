@@ -337,6 +337,7 @@ async function route() {
   }
   S.route = name;
   setNavState(name);
+  document.body.dataset.route = name;
   closeDrawer();
   const seq = ++routeSeq;
   try {
