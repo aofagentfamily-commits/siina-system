@@ -242,7 +242,10 @@ function scrollToMessage(msgId, instant) {
   const el = box && box.querySelector(`[data-msgid="${msgId}"]`);
   if (!el) return false;
   const reduce = document.documentElement.dataset.anim === 'off' || document.documentElement.dataset.anim === 'reduced';
-  box.scrollTo({ top: el.offsetTop - box.clientHeight / 2 + el.offsetHeight / 2, behavior: instant || reduce ? 'auto' : 'smooth' });
+  const target = el.offsetTop - box.clientHeight / 2 + el.offsetHeight / 2;
+  box.scrollTo({ top: target, behavior: instant || reduce ? 'auto' : 'smooth' });
+  // Safety net: if a smooth scroll has not landed (for example in a background tab), snap to the target.
+  setTimeout(() => { if (Math.abs(box.scrollTop - target) > 6) box.scrollTop = target; updateJumpButton(); }, 700);
   el.classList.remove('cv-hit');
   void el.offsetWidth;
   el.classList.add('cv-hit');
@@ -343,7 +346,9 @@ ACTIONS['chat-jump-next'] = () => {
   const below = tagged.filter((el) => el.offsetTop > bottom - 4);
   const above = tagged.filter((el) => el.offsetTop + el.offsetHeight < top + 4);
   const target = below.length ? below[0] : above[above.length - 1];
-  if (target) scrollToMessage(Number(target.dataset.msgid));
+  // data-msgid sits on the row that wraps the bubble, not on the bubble itself.
+  const row = target && target.closest('[data-msgid]');
+  if (row) scrollToMessage(Number(row.dataset.msgid));
 };
 ACTIONS['chat-info'] = async () => {
   const c = S.chat.chats.find((x) => x.id === S.chat.groupId);
