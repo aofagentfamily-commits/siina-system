@@ -78,6 +78,7 @@ add('POST', '/api/telegram/groups', (c) => tg.createGroup(c.user, c.body));
 add('PATCH', '/api/telegram/groups/:id', (c) => tg.updateGroup(c.user, c.params.id, c.body));
 add('DELETE', '/api/telegram/groups/:id', (c) => tg.deleteGroup(c.user, c.params.id));
 add('POST', '/api/telegram/groups/:id/test', (c) => tg.testGroup(c.user, c.params.id));
+add('GET', '/api/telegram/mentions', (c) => ({ items: tg.mentionList(c.user) }));
 add('GET', '/api/telegram/overview', (c) => tg.overview(c.user));
 add('GET', '/api/telegram/logs', (c) => ({ items: tg.listLogs(c.user, c.query) }));
 add('POST', '/api/telegram/autoreply/check', (c) => tg.autoReplyCheck(c.user, c.body.groupId));

@@ -486,18 +486,43 @@ function chatList(user) {
   }));
 }
 
-function groupMessages(user, groupId, q) {
-  getGroup(user, groupId);
-  const limit = u.int(q.limit || 60, { min: 1, max: 200, field: 'จำนวนข้อความ' });
-  const before = q.before ? u.int(q.before, { min: 0, field: 'ตำแหน่งข้อความ' }) : null;
-  const rows = db.prepare(`SELECT * FROM telegram_messages WHERE group_id = ? AND user_id = ?
-    AND (? IS NULL OR message_id < ?) ORDER BY message_id DESC LIMIT ?`).all(groupId, user.id, before, before, limit);
-  return rows.reverse().map((m) => ({
+function messageDto(m) {
+  return {
     id: m.id, messageId: m.message_id, senderId: m.sender_id, senderName: m.sender_name,
     text: m.text,
     attachments: JSON.parse(m.attachments).map((a) => ({ type: a.type, name: a.name, mime: a.mime, hasFile: !!a.fileId })),
     replyToMessageId: m.reply_to_message_id, replyToText: m.reply_to_text, matched: JSON.parse(m.matched),
     isOutgoing: !!m.is_outgoing, sentAt: m.sent_at, readAt: m.read_at,
+  };
+}
+
+// Latest messages, older pages (before=), or a window around one message (around=) for "jump to message".
+function groupMessages(user, groupId, q) {
+  getGroup(user, groupId);
+  const limit = u.int(q.limit || 60, { min: 1, max: 200, field: 'จำนวนข้อความ' });
+  if (q.around) {
+    const target = u.int(q.around, { min: 1, field: 'ข้อความเป้าหมาย' });
+    const half = Math.max(1, Math.floor(limit / 2));
+    const before = db.prepare(`SELECT * FROM telegram_messages WHERE group_id = ? AND user_id = ? AND message_id <= ?
+      ORDER BY message_id DESC LIMIT ?`).all(groupId, user.id, target, half + 1);
+    const after = db.prepare(`SELECT * FROM telegram_messages WHERE group_id = ? AND user_id = ? AND message_id > ?
+      ORDER BY message_id ASC LIMIT ?`).all(groupId, user.id, target, half);
+    return [...before.reverse(), ...after].map(messageDto);
+  }
+  const before = q.before ? u.int(q.before, { min: 0, field: 'ตำแหน่งข้อความ' }) : null;
+  const rows = db.prepare(`SELECT * FROM telegram_messages WHERE group_id = ? AND user_id = ?
+    AND (? IS NULL OR message_id < ?) ORDER BY message_id DESC LIMIT ?`).all(groupId, user.id, before, before, limit);
+  return rows.reverse().map(messageDto);
+}
+
+// Messages where someone tagged the user's Username (newest first), for the "มีการแท็กฉัน" tab.
+function mentionList(user) {
+  return db.prepare(`SELECT m.id, m.message_id, m.group_id, m.sender_name, m.text, m.sent_at, m.read_at, g.title AS group_title
+    FROM telegram_messages m JOIN telegram_groups g ON g.id = m.group_id
+    WHERE m.user_id = ? AND m.is_outgoing = 0 AND m.matched LIKE '%"mention"%'
+    ORDER BY m.sent_at DESC LIMIT 200`).all(user.id).map((r) => ({
+    id: r.id, messageId: r.message_id, groupId: r.group_id, groupTitle: r.group_title,
+    senderName: r.sender_name, text: r.text, sentAt: r.sent_at, read: !!r.read_at,
   }));
 }
 
@@ -712,7 +737,7 @@ function listLogs(user, q) {
 module.exports = {
   TelegramError, listBots, createBot, updateBot, deleteBot, testBot, setWebhookForUser,
   listGroups, createGroup, updateGroup, deleteGroup, testGroup,
-  processUpdate, pollAll, chatList, groupMessages, markGroupRead, mediaFile,
+  processUpdate, pollAll, chatList, groupMessages, mentionList, markGroupRead, mediaFile,
   sendMessage, retryOutbox, outboxForGroup,
   listFilters, createFilter, updateFilter, deleteFilter,
   overview, autoReplyCheck, listLogs,
