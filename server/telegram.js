@@ -543,6 +543,7 @@ function messageDto(m) {
     attachments: JSON.parse(m.attachments).map((a) => ({ type: a.type, name: a.name, mime: a.mime, hasFile: !!a.fileId })),
     replyToMessageId: m.reply_to_message_id, replyToText: m.reply_to_text, matched: JSON.parse(m.matched),
     isOutgoing: !!m.is_outgoing, sentAt: m.sent_at, readAt: m.read_at, threadId: m.thread_id ?? null,
+    ackedAt: m.acked_at || null,
   };
 }
 
@@ -565,14 +566,30 @@ function groupMessages(user, groupId, q) {
   return rows.reverse().map(messageDto);
 }
 
+// 👌 on a tagged message: the user acknowledged it. This is separate from the bot's auto-reply.
+// It closes the alert for that message and marks it as read in the summary.
+function ackMessage(user, rowId, acked) {
+  const m = db.prepare('SELECT id, matched FROM telegram_messages WHERE id = ? AND user_id = ?').get(rowId, user.id);
+  if (!m) throw new u.HttpError(404, 'ไม่พบข้อความ', 'NOT_FOUND');
+  const now = u.nowIso();
+  db.prepare('UPDATE telegram_messages SET acked_at = ? WHERE id = ? AND user_id = ?').run(acked ? now : null, rowId, user.id);
+  if (acked) {
+    db.prepare("UPDATE notifications SET read_at = COALESCE(read_at, ?) WHERE user_id = ? AND source_type = 'telegram' AND source_id = ?")
+      .run(now, user.id, rowId);
+  }
+  features.setSummaryState(user, { sourceType: 'telegram', sourceId: rowId, state: acked ? 'read' : 'open' });
+  tlog(user.id, 'รับทราบข้อความแท็ก', { detail: acked ? 'กด 👌 รับทราบแล้ว' : 'ยกเลิกการรับทราบ' });
+  return { ok: true, ackedAt: acked ? now : null };
+}
+
 // Messages where someone tagged the user's Username (newest first), for the "มีการแท็กฉัน" tab.
 function mentionList(user) {
-  return db.prepare(`SELECT m.id, m.message_id, m.group_id, m.sender_name, m.text, m.sent_at, m.read_at, g.title AS group_title
+  return db.prepare(`SELECT m.id, m.message_id, m.group_id, m.sender_name, m.text, m.sent_at, m.read_at, m.acked_at, g.title AS group_title
     FROM telegram_messages m JOIN telegram_groups g ON g.id = m.group_id
     WHERE m.user_id = ? AND m.is_outgoing = 0 AND m.matched LIKE '%"mention"%'
     ORDER BY m.sent_at DESC LIMIT 200`).all(user.id).map((r) => ({
     id: r.id, messageId: r.message_id, groupId: r.group_id, groupTitle: r.group_title,
-    senderName: r.sender_name, text: r.text, sentAt: r.sent_at, read: !!r.read_at,
+    senderName: r.sender_name, text: r.text, sentAt: r.sent_at, read: !!r.read_at, ackedAt: r.acked_at || null,
   }));
 }
 
@@ -872,7 +889,7 @@ module.exports = {
   listGroups, createGroup, updateGroup, deleteGroup, testGroup,
   processUpdate, pollAll, chatList, groupMessages, mentionList, markGroupRead, mediaFile,
   sendMessage, retryOutbox, outboxForGroup,
-  listFilters, createFilter, updateFilter, deleteFilter, groupTopics, renameTopic,
+  listFilters, createFilter, updateFilter, deleteFilter, groupTopics, renameTopic, ackMessage,
   overview, autoReplyCheck, listLogs, subscribe, sendFile, sendSticker,
   getWebhookBot: (id) => db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(id),
   publicBaseUrl,

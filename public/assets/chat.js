@@ -241,9 +241,51 @@ function bubbleHtml(m) {
       <div class="cv-text">${highlightMentions(m.text || (m.attachments && m.attachments.length ? '' : '(ไม่มีข้อความ)'))}</div>
       ${attachmentsHtml(m)}
       <div class="cv-actions"><button data-action="chat-reply" data-id="${m.id}" data-msgid="${m.messageId}" data-text="${esc(m.text.slice(0, 80))}">${icon('reply', 'sm')} ตอบกลับ</button></div>
+      ${isTag ? ackButtonHtml(m) : ''}
     </div>
   </div>`;
 }
+
+function ackButtonHtml(m) {
+  const acked = !!m.ackedAt;
+  return `<button type="button" class="cv-ack ${acked ? 'is-acked' : ''}" data-action="chat-ack" data-id="${esc(m.id)}" data-acked="${acked}"
+    aria-pressed="${acked}" aria-label="${acked ? 'รับทราบแล้ว' : 'กดเพื่อรับทราบ'}" title="${acked ? 'รับทราบแล้ว' : 'กดเพื่อรับทราบ'}">
+    <span class="cv-ack-emoji" aria-hidden="true">${acked ? '✓' : '👌'}</span></button>`;
+}
+ACTIONS['chat-ack'] = async (el) => {
+  if (el.dataset.busy) return;
+  const wasAcked = el.dataset.acked === 'true';
+  el.dataset.busy = '1';
+  el.classList.add('is-loading');
+  el.disabled = true;
+  try {
+    const r = await apiPost(`/api/telegram/messages/${el.dataset.id}/ack`, { acked: !wasAcked });
+    const m = S.chat.messages.find((x) => x.id === el.dataset.id);
+    if (m) m.ackedAt = r.ackedAt;
+    el.dataset.acked = String(!wasAcked);
+    el.classList.toggle('is-acked', !wasAcked);
+    el.setAttribute('aria-pressed', String(!wasAcked));
+    el.title = !wasAcked ? 'รับทราบแล้ว' : 'กดเพื่อรับทราบ';
+    el.querySelector('.cv-ack-emoji').textContent = !wasAcked ? '✓' : '👌';
+    toast(!wasAcked ? 'รับทราบแล้ว' : 'ยกเลิกการรับทราบแล้ว');
+  } catch (err) {
+    toast('บันทึกการรับทราบไม่สำเร็จ: ' + err.message, 'err');
+  } finally {
+    delete el.dataset.busy;
+    el.classList.remove('is-loading');
+    el.disabled = false;
+  }
+};
+
+// Enter sends; Shift+Enter starts a new line.
+document.addEventListener('keydown', (e) => {
+  const t = e.target;
+  if (!t || !t.classList || !t.classList.contains('cv-input')) return;
+  if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+  e.preventDefault();
+  const form = t.closest('form');
+  if (form && form.requestSubmit) form.requestSubmit();
+});
 
 function visibleMessages() {
   const q = S.chat.search.trim().toLowerCase();

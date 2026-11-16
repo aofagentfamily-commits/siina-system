@@ -980,3 +980,23 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .tpl-bar-modes { order: 5; width: 100%; }
   .tpl-act span { display: none; }
 }
+
+/* 👌 acknowledge button on tagged messages */
+.cv-tagged { position: relative; }
+.cv-tagged .cv-meta { padding-right: 44px; }
+.cv-ack {
+  position: absolute; top: -18px; right: -14px; width: 40px; height: 40px; border-radius: 50%; padding: 0;
+  display: grid; place-items: center; cursor: pointer; background: radial-gradient(circle at 35% 30%, #4B2A55, #2A1830);
+  border: 2.5px solid #FFD600; box-shadow: 0 0 12px rgba(255, 214, 0, .55); transition: transform .15s ease, background .2s ease;
+  z-index: 2;
+}
+.cv-ack:hover:not(:disabled) { transform: scale(1.08); }
+.cv-ack:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 3px; }
+.cv-ack:disabled { cursor: progress; opacity: .8; }
+.cv-ack-emoji { font-size: 20px; line-height: 1; color: #FFD600; }
+.cv-ack.is-acked { background: linear-gradient(135deg, #1FA66A, #0F7A4C); border-color: #7EE0B5; box-shadow: 0 0 10px rgba(126, 224, 181, .45); }
+.cv-ack.is-acked .cv-ack-emoji { color: #FFFFFF; font-weight: 700; font-size: 18px; }
+.cv-ack.is-loading::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid transparent; border-top-color: #FFFFFF; animation: spin .8s linear infinite; }
+/* taller chat frame: more messages visible */
+.cv-layout { height: calc(100vh - 185px); min-height: 560px; }
+@media (max-width: 1023px) { .cv-layout { height: auto; min-height: 560px; } }

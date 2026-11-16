@@ -90,6 +90,7 @@ add('POST', '/api/telegram/stickers', (c) => tpl.addSticker(c.user, c.body));
 add('DELETE', '/api/telegram/stickers/:id', (c) => tpl.deleteSticker(c.user, c.params.id));
 add('POST', '/api/telegram/groups/:id/send-file', (c) => tg.sendFile(c.user, c.params.id, c.body));
 add('POST', '/api/telegram/groups/:id/send-sticker', (c) => tg.sendSticker(c.user, c.params.id, c.body));
+add('POST', '/api/telegram/messages/:id/ack', (c) => tg.ackMessage(c.user, c.params.id, c.body.acked !== false && c.body.acked !== 'false'));
 add('GET', '/api/telegram/overview', (c) => tg.overview(c.user));
 add('GET', '/api/telegram/logs', (c) => ({ items: tg.listLogs(c.user, c.query) }));
 add('POST', '/api/telegram/autoreply/check', (c) => tg.autoReplyCheck(c.user, c.body.groupId));

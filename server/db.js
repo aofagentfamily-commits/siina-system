@@ -331,6 +331,9 @@ for (const [table, col, def] of [
   if (!columnsOf(table).some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
 }
 
+if (!columnsOf('telegram_messages').some((c) => c.name === 'acked_at')) {
+  db.exec('ALTER TABLE telegram_messages ADD COLUMN acked_at TEXT');
+}
 if (!columnsOf('telegram_outbox').some((c) => c.name === 'html')) {
   db.exec('ALTER TABLE telegram_outbox ADD COLUMN html TEXT');
 }
