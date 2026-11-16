@@ -954,3 +954,29 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .tpl-mode { flex: 1; justify-content: center; }
   .tpl-bar-main { flex-wrap: wrap; }
 }
+
+/* compact template bar and a fixed chat frame: nothing overlaps the messages */
+.cv-main { overflow: hidden; }
+.cv-body { min-height: 0; flex: 1 1 0; }
+.cv-messages { min-height: 0; }
+.cv-draft, .cv-composer, .cv-failed, .cv-headtabs, .cv-head, .cv-search-box { flex: none; }
+.tpl-bar { flex-direction: row; align-items: center; gap: 8px; padding: 6px 8px 6px 10px; border-radius: 14px; flex-wrap: nowrap; }
+.tpl-bar-ico { width: 30px; height: 30px; border-radius: 9px; }
+.tpl-bar-text { flex: 1; min-width: 0; }
+.tpl-bar-text small { display: none; }
+.tpl-bar-text b { font-size: .9rem; line-height: 1.3; }
+.tpl-bar-preview { -webkit-line-clamp: 1; font-size: .8rem; }
+.tpl-bar-modes { padding: 2px; }
+.tpl-mode { min-height: 28px; padding: 0 9px; font-size: .76rem; }
+.tpl-act { min-height: 30px; padding: 0 8px; border-radius: 9px; border: 1px solid rgba(255, 255, 255, .35); background: transparent; color: #FFFFFF; font: inherit; font-size: .78rem; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; flex: none; }
+.tpl-act:hover { background: rgba(255, 51, 144, .35); }
+.tpl-act .ic { width: 14px; height: 14px; }
+.tpl-collapse { width: 30px; padding: 0; justify-content: center; }
+.tpl-bar.is-collapsed .tpl-bar-modes, .tpl-bar.is-collapsed .tpl-act:not(.tpl-collapse) { display: none; }
+.tpl-bar-tools { display: none; }
+.cv-input { max-height: 120px; }
+@media (max-width: 640px) {
+  .tpl-bar { flex-wrap: wrap; }
+  .tpl-bar-modes { order: 5; width: 100%; }
+  .tpl-act span { display: none; }
+}

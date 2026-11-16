@@ -182,7 +182,7 @@ document.addEventListener('input', (e) => {
 });
 
 // The template bar above the composer. The composer text is never sent automatically.
-const COMPOSER_MAX = 170;
+const COMPOSER_MAX = 120;
 function autoSizeComposer() {
   const ta = $('.cv-input');
   if (!ta) return;
@@ -224,27 +224,22 @@ function renderDraft() {
   if (!box) return;
   const d = S.chat.draft;
   if (!d) { box.innerHTML = ''; autoSizeComposer(); return; }
-  const preview = d.mode === 'formatted' && d.html
-    ? `<span class="tpl-bar-preview">${d.html}</span>`
-    : `<span class="tpl-bar-preview">${esc(d.text.replace(/\s+/g, ' ').slice(0, 160))}</span>`;
+  // The bar shows only the template name and controls; the text itself stays in the composer.
+  const preview = '';
   box.innerHTML = `<div class="tpl-bar ${d.collapsed ? 'is-collapsed' : ''}" role="region" aria-label="เทมเพลตที่กำลังใช้">
-      <div class="tpl-bar-main">
-        <span class="tpl-bar-ico">${icon('file', 'sm')}</span>
-        <div class="tpl-bar-text">
-          <small>กำลังใช้เทมเพลต${d.edited ? ' · แก้ไขแล้ว (ส่งแบบธรรมดา)' : ''}</small>
-          <b class="ellipsis">${esc(d.name)}</b>
-          ${d.collapsed ? '' : preview}
-        </div>
-        <div class="tpl-bar-modes" role="group" aria-label="รูปแบบการส่ง">
-          <button type="button" class="tpl-mode" aria-pressed="${d.mode === 'formatted'}" data-action="chat-draft-mode" data-mode="formatted" ${d.html ? '' : 'disabled title="เทมเพลตนี้ไม่มีรูปแบบ"'}>${icon('check', 'sm')} คงรูปแบบ</button>
-          <button type="button" class="tpl-mode" aria-pressed="${d.mode === 'plain'}" data-action="chat-draft-mode" data-mode="plain">ส่งแบบธรรมดา</button>
-        </div>
-        <button type="button" class="btn icon ghost tpl-collapse" data-action="chat-draft-collapse" aria-expanded="${!d.collapsed}" aria-label="${d.collapsed ? 'ขยายรายละเอียด' : 'ย่อรายละเอียด'}">${icon(d.collapsed ? 'chevDown' : 'chevLeft', 'sm')}</button>
+      <span class="tpl-bar-ico">${icon('file', 'sm')}</span>
+      <div class="tpl-bar-text">
+        <small>กำลังใช้เทมเพลต${d.edited ? ' · แก้ไขแล้ว' : ''}</small>
+        <b class="ellipsis">${esc(d.name)}</b>
+        ${d.collapsed ? '' : preview}
       </div>
-      <div class="tpl-bar-tools">
-        <button type="button" class="btn sm" data-action="chat-draft-edit">${icon('edit', 'sm')} แก้ไขก่อนส่ง</button>
-        <button type="button" class="btn sm ghost" data-action="chat-draft-clear">${icon('close', 'sm')} ล้างเทมเพลต</button>
+      <div class="tpl-bar-modes" role="group" aria-label="รูปแบบการส่ง">
+        <button type="button" class="tpl-mode" aria-pressed="${d.mode === 'formatted'}" data-action="chat-draft-mode" data-mode="formatted" ${d.html ? '' : 'disabled title="เทมเพลตนี้ไม่มีรูปแบบ"'}>คงรูปแบบ</button>
+        <button type="button" class="tpl-mode" aria-pressed="${d.mode === 'plain'}" data-action="chat-draft-mode" data-mode="plain">ส่งแบบธรรมดา</button>
       </div>
+      <button type="button" class="tpl-act" data-action="chat-draft-edit" title="แก้ไขก่อนส่ง">${icon('edit', 'sm')}<span>แก้ไข</span></button>
+      <button type="button" class="tpl-act" data-action="chat-draft-clear" title="ล้างเทมเพลต">${icon('close', 'sm')}<span>ล้าง</span></button>
+      <button type="button" class="tpl-act tpl-collapse" data-action="chat-draft-collapse" aria-expanded="${!d.collapsed}" aria-label="${d.collapsed ? 'ขยายรายละเอียด' : 'ย่อรายละเอียด'}">${icon(d.collapsed ? 'chevDown' : 'chevLeft', 'sm')}</button>
     </div>`;
   autoSizeComposer();
 }
