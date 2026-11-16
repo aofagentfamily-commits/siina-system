@@ -2,7 +2,9 @@
 // Telegram Bot integration: bot & group management, message ingest (webhook or polling),
 // keyword/mention/sender/reply filters, and an idempotent send-to-group outbox.
 // Bot tokens are encrypted at rest and never returned to the browser in full.
-const { db } = require('./db');
+const fs = require('fs');
+const path = require('path');
+const { db, DATA_DIR } = require('./db');
 const u = require('./util');
 
 const API_BASE = 'https://api.telegram.org';
@@ -228,13 +230,58 @@ function saveGroupTest(id, ok, message, info) {
 }
 
 // ---------------------------------------------------------------- ingest
+const MEDIA_LIMIT = 20 * 1024 * 1024; // Bot API download limit
+
+// Keeps what is needed to fetch the file later (file_id stays on the server, never sent to the browser).
 function attachmentsOf(msg) {
   const list = [];
-  if (msg.photo) list.push({ type: 'photo' });
-  for (const k of ['document', 'video', 'audio', 'voice', 'sticker', 'animation']) {
-    if (msg[k]) list.push({ type: k, name: msg[k].file_name || null });
+  const push = (type, name, f, mime) => {
+    if (!f || !f.file_id) return;
+    if (f.file_unique_id && list.some((x) => x.uniqueId === f.file_unique_id)) return; // same file sent twice
+    list.push({ type, name, fileId: f.file_id, uniqueId: f.file_unique_id || null, mime, size: f.file_size || 0 });
+  };
+  if (msg.photo && msg.photo.length) push('photo', 'รูปภาพ', msg.photo[msg.photo.length - 1], 'image/jpeg');
+  if (msg.sticker) {
+    const st = msg.sticker;
+    const mime = st.is_animated ? 'application/x-tgsticker' : st.is_video ? 'video/webm' : 'image/webp';
+    push('sticker', st.emoji ? `สติกเกอร์ ${st.emoji}` : 'สติกเกอร์', st, mime);
   }
+  push('animation', msg.animation && msg.animation.file_name || 'GIF', msg.animation, 'video/mp4');
+  push('video', msg.video && msg.video.file_name || 'วิดีโอ', msg.video, 'video/mp4');
+  push('voice', 'ข้อความเสียง', msg.voice, 'audio/ogg');
+  push('audio', msg.audio && msg.audio.file_name || 'เสียง', msg.audio, 'audio/mpeg');
+  push('document', msg.document && msg.document.file_name || 'ไฟล์', msg.document, (msg.document && msg.document.mime_type) || 'application/octet-stream');
   return list;
+}
+
+// Downloads an attachment from Telegram once and keeps it in DATA_DIR/media.
+async function mediaFile(user, rowId, index) {
+  const row = db.prepare(`SELECT m.attachments, g.bot_id FROM telegram_messages m
+    JOIN telegram_groups g ON g.id = m.group_id WHERE m.id = ? AND m.user_id = ?`).get(rowId, user.id);
+  if (!row) throw new u.HttpError(404, 'ไม่พบไฟล์', 'NOT_FOUND');
+  const att = JSON.parse(row.attachments)[index];
+  if (!att || !att.fileId || !att.uniqueId || !/^[A-Za-z0-9_-]{1,100}$/.test(att.uniqueId)) {
+    throw new u.HttpError(404, 'ไฟล์นี้แสดงไม่ได้ (เก็บก่อนเปิดระบบรับไฟล์)', 'NO_FILE');
+  }
+  if (att.size > MEDIA_LIMIT) throw new u.HttpError(413, 'ไฟล์ใหญ่เกิน 20 MB แสดงไม่ได้', 'TOO_LARGE');
+  const dir = path.join(DATA_DIR, 'media');
+  fs.mkdirSync(dir, { recursive: true });
+  const cachePath = path.join(dir, att.uniqueId);
+  if (!fs.existsSync(cachePath)) {
+    const bot = db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(row.bot_id);
+    const token = botToken(bot);
+    const info = await callApi(token, 'getFile', { file_id: att.fileId });
+    if (!info.file_path) throw new u.HttpError(404, 'ไม่พบไฟล์บน Telegram', 'NOT_FOUND');
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/file/bot${token}/${info.file_path}`, { signal: AbortSignal.timeout(30000) });
+    } catch (err) {
+      throw new TelegramError('ดาวน์โหลดไฟล์จาก Telegram ไม่สำเร็จ', 'NETWORK');
+    }
+    if (!res.ok) throw new TelegramError('ดาวน์โหลดไฟล์จาก Telegram ไม่สำเร็จ', 'FILE');
+    fs.writeFileSync(cachePath, Buffer.from(await res.arrayBuffer()));
+  }
+  return { path: cachePath, mime: att.mime };
 }
 
 function mentionsIn(msg) {
@@ -358,7 +405,7 @@ function groupMessages(user, groupId, q) {
     AND (? IS NULL OR message_id < ?) ORDER BY message_id DESC LIMIT ?`).all(groupId, user.id, before, before, limit);
   return rows.reverse().map((m) => ({
     id: m.id, messageId: m.message_id, senderId: m.sender_id, senderName: m.sender_name,
-    text: m.text, attachments: JSON.parse(m.attachments), replyToMessageId: m.reply_to_message_id,
+    text: m.text, attachments: JSON.parse(m.attachments).map((a) => ({ type: a.type, name: a.name, mime: a.mime, hasFile: !!a.fileId })), replyToMessageId: m.reply_to_message_id,
     replyToText: m.reply_to_text, matched: JSON.parse(m.matched), isOutgoing: !!m.is_outgoing,
     sentAt: m.sent_at, readAt: m.read_at,
   }));
@@ -462,7 +509,7 @@ function deleteFilter(user, id) {
 module.exports = {
   TelegramError, listBots, createBot, updateBot, deleteBot, testBot, setWebhookForUser,
   listGroups, createGroup, updateGroup, deleteGroup, testGroup,
-  processUpdate, pollAll, chatList, groupMessages, markGroupRead, sendMessage, retryOutbox, outboxForGroup,
+  processUpdate, pollAll, chatList, groupMessages, mediaFile, markGroupRead, sendMessage, retryOutbox, outboxForGroup,
   listFilters, createFilter, updateFilter, deleteFilter,
   getBot, getWebhookBot: (id) => db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(id),
   publicBaseUrl,

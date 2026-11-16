@@ -1,5 +1,6 @@
 'use strict';
 // HTTP router, auth middleware and API route table. No framework: plain node:http.
+const fs = require('fs');
 const { HttpError, logError } = require('./util');
 const auth = require('./auth');
 const f = require('./features');
@@ -77,6 +78,10 @@ add('POST', '/api/telegram/groups', (c) => tg.createGroup(c.user, c.body));
 add('PATCH', '/api/telegram/groups/:id', (c) => tg.updateGroup(c.user, c.params.id, c.body));
 add('DELETE', '/api/telegram/groups/:id', (c) => tg.deleteGroup(c.user, c.params.id));
 add('POST', '/api/telegram/groups/:id/test', (c) => tg.testGroup(c.user, c.params.id));
+add('GET', '/api/telegram/media/:rowId/:index', async (c) => {
+  const file = await tg.mediaFile(c.user, c.params.rowId, Number(c.params.index));
+  return { __file: file.path, mime: file.mime };
+});
 add('GET', '/api/telegram/chats', (c) => ({ items: tg.chatList(c.user) }));
 add('GET', '/api/telegram/groups/:id/messages', (c) => ({ items: tg.groupMessages(c.user, c.params.id, c.query) }));
 add('POST', '/api/telegram/groups/:id/read', (c) => tg.markGroupRead(c.user, c.params.id));
@@ -181,6 +186,16 @@ async function handleApi(req, res, url) {
   };
   const result = await route.handler(ctx);
   if (setCookies.length) headers['set-cookie'] = setCookies;
+  if (result && result.__file) {
+    res.writeHead(200, {
+      'content-type': result.mime,
+      'cache-control': 'private, max-age=3600',
+      'x-content-type-options': 'nosniff',
+      ...headers,
+    });
+    fs.createReadStream(result.__file).pipe(res);
+    return;
+  }
   sendJson(res, 200, result === undefined ? { ok: true } : result, headers);
 }
 

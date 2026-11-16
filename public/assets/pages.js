@@ -746,7 +746,17 @@ function msgHtml(m) {
   if (m.matched.includes('reply_to_me')) tags.push('<span class="badge purple">ตอบกลับคุณ</span>');
   if (m.matched.includes('keyword')) tags.push('<span class="badge warn">คำสำคัญ</span>');
   if (m.matched.includes('sender')) tags.push('<span class="badge">ผู้ส่งที่ติดตาม</span>');
-  const files = (m.attachments || []).map((a) => `<span class="file">${icon('file', 'sm')} ${esc(a.name || a.type)}</span>`).join('');
+  const names = (m.attachments || []).map((a) => a.name);
+  const files = (m.attachments || []).filter((a, i) => !(a.type === 'document' && names.some((n, j) => j !== i && n === a.name))).map((a, i) => {
+    const src = `/api/telegram/media/${encodeURIComponent(m.id)}/${(m.attachments || []).indexOf(a)}`;
+    if (!a.hasFile) return `<span class="file">${icon('file', 'sm')} ${esc(a.name || a.type)}</span>`;
+    if (a.type === 'photo' || (a.type === 'sticker' && a.mime === 'image/webp')) return `<img class="media" loading="lazy" src="${src}" alt="${esc(a.name)}">`;
+    if (a.type === 'animation') return `<video class="media" src="${src}" autoplay loop muted playsinline aria-label="${esc(a.name)}"></video>`;
+    if (a.type === 'video' || (a.type === 'sticker' && a.mime === 'video/webm')) return `<video class="media" src="${src}" controls preload="metadata"></video>`;
+    if (a.type === 'voice' || a.type === 'audio') return `<audio class="media-audio" controls preload="none" src="${src}"></audio>`;
+    if (a.type === 'sticker') return `<span class="file">${icon('file', 'sm')} ${esc(a.name)} (แอนิเมชัน แสดงไม่ได้)</span>`;
+    return `<a class="file" href="${src}" download>${icon('file', 'sm')} ${esc(a.name || 'ไฟล์')}</a>`;
+  }).join('');
   return `<div class="msg ${m.isOutgoing ? 'mine' : ''} ${m.matched.length ? 'hit' : ''}" data-msgid="${m.messageId}">
     <div class="who">${esc(m.senderName)} <time>${esc(fmtTime(m.sentAt))}</time></div>
     ${m.replyToText ? `<div class="quote">${esc(m.replyToText)}</div>` : ''}

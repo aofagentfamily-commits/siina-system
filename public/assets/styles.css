@@ -575,3 +575,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
   }
   .login-card .steps { margin-top: 0; }
 }
+
+/* Telegram media inside chat bubbles */
+.msg .media { display: block; max-width: 300px; width: 100%; max-height: 360px; height: auto; border-radius: 12px; margin-top: 6px; background: rgba(0,0,0,.2); }
+.msg .media-audio { display: block; margin-top: 6px; max-width: 280px; width: 100%; }
+.msg a.file { text-decoration: none; color: inherit; }
