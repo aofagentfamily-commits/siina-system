@@ -23,20 +23,19 @@ function topicOf(m) {
 }
 function topicRowHtml() {
   if (!S.chat.topics.length) return '';
-  const items = [['all', 'ทั้งหมด']].concat(S.chat.topics.map((t) => [String(t.threadId), t.name === 'General' ? 'ทั่วไป' : t.name]));
-  const unnamed = (id) => /^หัวข้อ #/.test(id);
-  return `<nav class="cv-topics" aria-label="หัวข้อในกลุ่ม">${items.map(([k, l]) => `<span class="cv-topic-wrap">
-      <button class="cv-topic-chip" aria-selected="${S.chat.topic === k}" data-action="chat-topic" data-id="${esc(k)}">${icon('chat', 'sm')} ${esc(l)}</button>
-      ${k !== 'all' && k !== '1' ? `<button class="cv-topic-edit ${unnamed(l) ? 'needs-name' : ''}" data-action="chat-topic-rename" data-thread="${esc(k)}" data-name="${esc(l)}" aria-label="แก้ชื่อหัวข้อ ${esc(l)}" title="แก้ชื่อหัวข้อ">${icon('edit', 'sm')}${unnamed(l) ? ' ตั้งชื่อ' : ''}</button>` : ''}
-    </span>`).join('')}</nav>`;
+  const items = [['all', 'ทั้งหมด', '', '']].concat(S.chat.topics.map((t) => [String(t.threadId), t.name === 'General' ? 'ทั่วไป' : t.name, t.threadId, t.name]));
+  const unnamed = (name) => /^หัวข้อ #/.test(name);
+  return `<nav class="cv-topics" aria-label="หัวข้อในกลุ่ม">${items.map(([k, l, thread, raw]) => {
+    const canRename = k !== 'all' && k !== '1';
+    return `<button class="cv-topic-chip ${canRename && unnamed(raw) ? 'needs-name' : ''}" aria-selected="${S.chat.topic === k}"
+      data-action="chat-topic" data-id="${esc(k)}" data-thread="${esc(thread)}" data-name="${esc(raw)}"
+      title="${canRename ? 'กดอีกครั้งเมื่อเลือกอยู่เพื่อแก้ชื่อหัวข้อ' : ''}">${icon('chat', 'sm')} ${esc(l)}${canRename && unnamed(raw) ? ' · ตั้งชื่อ' : ''}</button>`;
+  }).join('')}</nav>`;
 }
-function topicSelectHtml() {
+function topicHintHtml() {
   if (!S.chat.topics.length) return '';
-  const current = S.chat.topic === 'all' ? '' : S.chat.topic;
-  const options = S.chat.topics.filter((t) => t.threadId !== 1)
-    .map((t) => `<option value="${t.threadId}" ${String(t.threadId) === current ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
-  return `<label class="cv-topic-pick"><span>ส่งไปยัง</span><select class="select" name="threadId" aria-label="เลือกหัวข้อที่จะส่ง">
-    <option value="">ทั่วไป</option>${options}</select></label>`;
+  const label = S.chat.topic === 'all' ? 'ทั่วไป' : topicName(Number(S.chat.topic));
+  return `<small class="cv-target">ส่งไปยัง: <b>${esc(label)}</b> (เลือกจากแถบหัวข้อด้านบน)</small>`;
 }
 
 function cvTimeLabel(iso) {
@@ -133,7 +132,7 @@ async function renderChat(params) {
           <button class="btn sm" data-action="outbox-retry" data-id="${esc(o.id)}">ส่งซ้ำ</button></div>`).join('')}</div>` : ''}
         <form class="cv-composer" data-form="chat-send" data-group="${esc(active.id)}">
           <div class="cv-reply-bar" id="cvReplyBar">${replyBarHtml()}</div>
-          ${topicSelectHtml()}
+          ${topicHintHtml()}
           <div class="cv-input-row">
             <button type="button" class="btn icon ghost" disabled title="แนบไฟล์: ยังไม่พร้อมใช้งาน" aria-label="แนบไฟล์ (ยังไม่พร้อมใช้งาน)">${icon('plus')}</button>
             <textarea class="textarea cv-input" name="text" rows="1" maxlength="4000" placeholder="พิมพ์ข้อความเพื่อตอบกลับในกลุ่ม..." ${active.enabled && active.status !== 'unlinked' ? '' : 'disabled'} aria-label="ข้อความ"></textarea>
@@ -367,10 +366,16 @@ ACTIONS['chat-reply'] = (el) => {
   if (input) input.focus();
 };
 ACTIONS['chat-topic'] = (el) => {
+  // A second tap on the topic that is already selected opens the rename popup.
+  if (el.getAttribute('aria-selected') === 'true' && el.dataset.id !== 'all' && el.dataset.id !== '1') {
+    ACTIONS['chat-topic-rename'](el);
+    return;
+  }
   S.chat.topic = el.dataset.id;
   $$('.cv-topic-chip').forEach((b) => b.setAttribute('aria-selected', String(b === el)));
   const sel = document.querySelector('[name="threadId"]');
-  if (sel) sel.value = S.chat.topic === 'all' ? '' : S.chat.topic;
+  const hint = document.querySelector('.cv-target');
+  if (hint) hint.outerHTML = topicHintHtml();
   const box = $('#messages');
   if (box) { box.innerHTML = messagesHtml(); bindMessageArea(); }
 };
@@ -453,8 +458,7 @@ FORMS['chat-send'] = async (form) => {
   errBox.textContent = 'กำลังส่งไปยัง Telegram...';
   errBox.style.color = '';
   try {
-    const pick = form.querySelector('[name="threadId"]');
-    const body = { text, replyToMessageId: S.chat.replyTo ? S.chat.replyTo.messageId : null, threadId: pick && pick.value ? Number(pick.value) : null };
+    const body = { text, replyToMessageId: S.chat.replyTo ? S.chat.replyTo.messageId : null, threadId: S.chat.topic !== 'all' ? Number(S.chat.topic) : null };
     const result = await busy(btn, () => apiPost(`/api/telegram/groups/${form.dataset.group}/send`, body, { 'x-client-key': S.chat.draftKey }));
     if (result && result.status === 'failed') {
       errBox.textContent = 'ส่งไม่สำเร็จ: ' + (result.error || 'ไม่ทราบสาเหตุ') + ' · กดส่งซ้ำได้จากรายการด้านบน';

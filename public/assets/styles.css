@@ -852,3 +852,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .cv-topic-edit { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 8px; border-radius: 10px; border: 1.5px dashed #FFB7D5; background: transparent; color: #FFE4F0; font: inherit; font-size: .8rem; cursor: pointer; white-space: nowrap; }
 .cv-topic-edit.needs-name { border-color: #FFD633; color: #FFD633; font-weight: 600; }
 .cv-topic-edit:hover { border-style: solid; border-color: #FF4F9A; }
+
+/* chat: fixed working height so the composer never drops below the screen */
+.cv-layout { height: calc(100vh - 265px); min-height: 520px; }
+.cv-target { color: #D7CEDB; font-size: .82rem; padding: 0 2px; }
+.cv-target b { color: #FFB7D5; }
+.cv-topic-chip.needs-name { border-color: #FFD633; color: #3D1F38; }
+.cv-topic-chip.needs-name[aria-selected="true"] { border-color: #FF4F9A; }
+@media (max-width: 1023px) { .cv-layout { height: auto; min-height: 560px; } }
