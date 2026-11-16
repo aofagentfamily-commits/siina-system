@@ -799,3 +799,35 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .empty { background: rgba(255, 255, 255, .04); border-color: rgba(255, 183, 213, .3); color: #CFC2DA; }
 .tab, .btn { border-color: rgba(255, 183, 213, .4); }
 .btn:not(.primary):not(.danger):not(.ghost) { background: rgba(255, 255, 255, .1); }
+
+/* ---------------------------------------------------------------- stronger contrast (pink and white accents) */
+.card {
+  background: linear-gradient(180deg, #3D1F38 0%, #2B1A2E 100%);
+  border: 1.5px solid rgba(255, 79, 154, .55);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .4), 0 0 0 1px rgba(255, 183, 213, .08) inset;
+}
+.input, .select, .textarea {
+  background: #FFFFFF;
+  border: 1.5px solid #FFB7D5;
+  color: #17131C;
+  font-weight: 500;
+}
+.input::placeholder, .textarea::placeholder { color: #8A7796; }
+.input:focus, .select:focus, .textarea:focus { background: #FFFFFF; border-color: #FF4F9A; box-shadow: 0 0 0 4px rgba(255, 79, 154, .25); }
+.select option { background: #FFFFFF; color: #17131C; }
+.item { background: rgba(255, 255, 255, .1); border: 1px solid rgba(255, 183, 213, .3); }
+.item:hover { background: rgba(255, 79, 154, .2); border-color: #FF4F9A; }
+.tg-tag { background: #FFFFFF; border-color: #FFB7D5; color: #17131C; font-weight: 500; }
+.tg-tag.on { background: #FF4F9A; border-color: #FF4F9A; color: #FFFFFF; }
+.tg-tag-x { color: #5B4B66; }
+.badge { background: #FFB7D5; color: #3D1F38; font-weight: 600; }
+.badge.ok { background: #B8F5DA; color: #0F4D33; }
+.badge.danger { background: #FFC2D2; color: #7A1030; }
+.badge.pink { background: #FF4F9A; color: #FFFFFF; }
+.empty { background: rgba(255, 255, 255, .08); border: 1.5px dashed #FFB7D5; color: #FFE4F0; }
+.btn:not(.primary):not(.danger):not(.ghost) { background: #FFFFFF; color: #3D1F38; border-color: #FFB7D5; }
+.btn:not(.primary):not(.danger):not(.ghost):hover:not(:disabled) { border-color: #FF4F9A; box-shadow: 0 0 16px rgba(255, 79, 154, .35); }
+.tab { background: #FFFFFF; color: #3D1F38; border-color: #FFB7D5; font-weight: 500; }
+.tab[aria-selected="true"] { color: #FFFFFF; }
+.setting-row { border-bottom-color: rgba(255, 183, 213, .35); }
+.switch span { background: #6B4A70; }
