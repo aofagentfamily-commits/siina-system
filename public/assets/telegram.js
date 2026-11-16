@@ -404,7 +404,37 @@ CHANGES['tg-group-auto'] = async (el) => {
 // ---------------------------------------------------------------- avatar editor (bot and group pictures)
 // Crops a square from the picture. offX/offY (-1..1) move the window across the free space,
 // zoom makes the window smaller. The user moves the picture by dragging it.
-function cropSquare(img, zoom, offX = 0, offY = 0) {
+// Makes the white background that touches the picture's edges transparent (flood fill from the edges),
+// so white inside the picture is kept.
+function clearWhiteBackground(canvas) {
+  const ctx = canvas.getContext('2d');
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d = image.data;
+  const w = canvas.width;
+  const h = canvas.height;
+  const seen = new Uint8Array(w * h);
+  const stack = [];
+  const isWhite = (p) => d[p * 4] > 225 && d[p * 4 + 1] > 225 && d[p * 4 + 2] > 225;
+  const push = (x, y) => {
+    const p = y * w + x;
+    if (!seen[p] && isWhite(p)) { seen[p] = 1; stack.push(p); }
+  };
+  for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
+  for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
+  while (stack.length) {
+    const p = stack.pop();
+    d[p * 4 + 3] = 0;
+    const x = p % w;
+    const y = (p - x) / w;
+    if (x > 0) push(x - 1, y);
+    if (x < w - 1) push(x + 1, y);
+    if (y > 0) push(x, y - 1);
+    if (y < h - 1) push(x, y + 1);
+  }
+  ctx.putImageData(image, 0, 0);
+}
+
+function cropSquare(img, zoom, offX = 0, offY = 0, removeWhite = false) {
   const w = img.naturalWidth;
   const h = img.naturalHeight;
   const side = Math.min(w, h) / zoom;
@@ -416,6 +446,10 @@ function cropSquare(img, zoom, offX = 0, offY = 0) {
   canvas.width = 256;
   canvas.height = 256;
   canvas.getContext('2d').drawImage(img, sx, sy, side, side, 0, 0, 256, 256);
+  if (removeWhite) {
+    clearWhiteBackground(canvas);
+    return canvas.toDataURL('image/png');
+  }
   return canvas.toDataURL('image/webp', 0.86);
 }
 
@@ -433,6 +467,7 @@ function openAvatarEditor({ title, current, fallback, onSave }) {
         <button class="btn sm danger" type="button" id="avRemove">${icon('trash2', 'sm')} ลบรูป</button>
       </div>
       <label class="field" id="avZoomWrap" hidden><span>ซูมเข้า</span><input class="range" type="range" id="avZoom" min="1" max="3" step="0.05" value="1"></label>
+      <label class="check" id="avWhiteWrap" hidden><input type="checkbox" id="avWhite"> ลบพื้นหลังสีขาว (ทำให้โปร่งใส)</label>
       <p class="small" id="avError" style="color:var(--danger);min-height:1.2em"></p>
     </div>`,
     footer: `<button class="btn ghost" data-action="close-modal">ยกเลิก</button>
@@ -445,9 +480,10 @@ function openAvatarEditor({ title, current, fallback, onSave }) {
   const zoomInput = overlay.querySelector('#avZoom');
   let offX = 0;
   let offY = 0;
+  let removeWhite = false;
   const render = () => {
     if (!image) return;
-    result = cropSquare(image, Number(zoomInput.value), offX, offY);
+    result = cropSquare(image, Number(zoomInput.value), offX, offY, removeWhite);
     box.innerHTML = preview(result);
     save.disabled = false;
   };
@@ -466,6 +502,7 @@ function openAvatarEditor({ title, current, fallback, onSave }) {
         offY = 0;
         zoomInput.value = 1;
         zoomWrap.hidden = false;
+        overlay.querySelector('#avWhiteWrap').hidden = false;
         render();
       };
       img.onerror = () => { error.textContent = 'เปิดรูปนี้ไม่ได้'; };
@@ -474,6 +511,8 @@ function openAvatarEditor({ title, current, fallback, onSave }) {
     reader.readAsDataURL(file);
   });
   zoomInput.addEventListener('input', render);
+  const whiteInput = overlay.querySelector('#avWhite');
+  whiteInput.addEventListener('change', () => { removeWhite = whiteInput.checked; render(); });
   // Drag the picture to choose what stays inside the square.
   let drag = null;
   let frame = 0;

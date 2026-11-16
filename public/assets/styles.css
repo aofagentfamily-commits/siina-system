@@ -1037,3 +1037,5 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .av-preview img { pointer-events: none; }
 .av-box.is-dragging .av-preview { cursor: grabbing; }
 .pj-preview { background: #1E1426; }
+
+.av-editor .check { color: #FFFFFF; }
