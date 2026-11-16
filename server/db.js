@@ -214,6 +214,16 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_logs_user ON activity_logs(user_id, created_at);
 
+CREATE TABLE IF NOT EXISTS telegram_topics (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id TEXT NOT NULL REFERENCES telegram_groups(id) ON DELETE CASCADE,
+  thread_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(group_id, thread_id)
+);
+
 CREATE TABLE IF NOT EXISTS telegram_logs (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -290,6 +300,15 @@ if (!columnsOf('telegram_bots').some((c) => c.name === 'avatar_data')) {
       db.exec('PRAGMA foreign_keys = ON');
     }
   }
+}
+
+// Forum topics: thread id on messages and outbox, and the forum flag on groups.
+for (const [table, col, def] of [
+  ['telegram_messages', 'thread_id', 'INTEGER'],
+  ['telegram_outbox', 'thread_id', 'INTEGER'],
+  ['telegram_groups', 'is_forum', 'INTEGER NOT NULL DEFAULT 0'],
+]) {
+  if (!columnsOf(table).some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
 }
 
 module.exports = { db, DATA_DIR };

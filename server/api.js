@@ -89,6 +89,7 @@ add('GET', '/api/telegram/media/:rowId/:index', async (c) => {
 add('GET', '/api/telegram/chats', (c) => ({ items: tg.chatList(c.user) }));
 add('GET', '/api/telegram/groups/:id/messages', (c) => ({ items: tg.groupMessages(c.user, c.params.id, c.query) }));
 add('POST', '/api/telegram/groups/:id/read', (c) => tg.markGroupRead(c.user, c.params.id));
+add('GET', '/api/telegram/groups/:id/topics', (c) => ({ items: tg.groupTopics(c.user, c.params.id) }));
 add('GET', '/api/telegram/groups/:id/outbox', (c) => ({ items: tg.outboxForGroup(c.user, c.params.id) }));
 add('POST', '/api/telegram/groups/:id/send', (c) => tg.sendMessage(c.user, c.params.id, c.body, c.headers['x-client-key']));
 add('POST', '/api/telegram/outbox/:id/retry', (c) => tg.retryOutbox(c.user, c.params.id));

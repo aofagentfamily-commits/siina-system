@@ -3,7 +3,7 @@
 'use strict';
 
 S.chat = { groupId: null, replyTo: null, draftKey: null, draftText: null, tab: 'all', headTab: 'all',
-  listQuery: '', search: '', chats: [], mentions: [], messages: [], failed: [], anchored: false };
+  listQuery: '', search: '', chats: [], mentions: [], messages: [], failed: [], anchored: false, topics: [], topic: 'all' };
 
 const CHAT_TABS = [['all', 'ทั้งหมด'], ['mention', 'มีการแท็กฉัน'], ['unread', 'ยังไม่ได้อ่าน']];
 const CHAT_HEAD_TABS = [['all', 'ข้อความ'], ['important', 'สำคัญ'], ['files', 'ไฟล์'], ['links', 'ลิงก์'], ['ai', 'สรุปด้วย AI']];
@@ -12,6 +12,29 @@ function cvAvatar(c, size) {
   if (c.avatarData) return `<span class="cv-av" style="width:${size}px;height:${size}px"><img src="${esc(c.avatarData)}" alt=""></span>`;
   return `<span class="cv-av cv-av-group" style="width:${size}px;height:${size}px">${esc(initials(c.title))}</span>`;
 }
+// Telegram calls the "General" topic thread 1 (or no thread at all).
+function topicName(threadId) {
+  if (threadId == null || threadId === 1) return 'ทั่วไป';
+  const t = S.chat.topics.find((x) => x.threadId === threadId);
+  return t ? t.name : `หัวข้อ #${threadId}`;
+}
+function topicOf(m) {
+  return m.threadId == null ? 1 : m.threadId;
+}
+function topicRowHtml() {
+  if (!S.chat.topics.length) return '';
+  const items = [['all', 'ทั้งหมด']].concat(S.chat.topics.map((t) => [String(t.threadId), t.name === 'General' ? 'ทั่วไป' : t.name]));
+  return `<nav class="cv-topics" aria-label="หัวข้อในกลุ่ม">${items.map(([k, l]) => `<button class="cv-topic-chip" aria-selected="${S.chat.topic === k}" data-action="chat-topic" data-id="${esc(k)}">${icon('chat', 'sm')} ${esc(l)}</button>`).join('')}</nav>`;
+}
+function topicSelectHtml() {
+  if (!S.chat.topics.length) return '';
+  const current = S.chat.topic === 'all' ? '' : S.chat.topic;
+  const options = S.chat.topics.filter((t) => t.threadId !== 1)
+    .map((t) => `<option value="${t.threadId}" ${String(t.threadId) === current ? 'selected' : ''}>${esc(t.name)}</option>`).join('');
+  return `<label class="cv-topic-pick"><span>ส่งไปยัง</span><select class="select" name="threadId" aria-label="เลือกหัวข้อที่จะส่ง">
+    <option value="">ทั่วไป</option>${options}</select></label>`;
+}
+
 function cvTimeLabel(iso) {
   if (!iso) return '';
   const d = new Date(iso);
@@ -40,10 +63,13 @@ async function renderChat(params) {
   if (!S.chat.groupId || !chats.some((c) => c.id === S.chat.groupId)) S.chat.groupId = chats[0].id;
   const active = chats.find((c) => c.id === S.chat.groupId);
   const query = requested ? `around=${requested}&limit=60` : 'limit=80';
-  const [{ items: messages }, { items: outbox }] = await Promise.all([
+  const [{ items: messages }, { items: outbox }, { items: topics }] = await Promise.all([
     apiGet(`/api/telegram/groups/${active.id}/messages?${query}`),
     apiGet(`/api/telegram/groups/${active.id}/outbox`),
+    apiGet(`/api/telegram/groups/${active.id}/topics`),
   ]);
+  if (S.chat.lastGroupId !== active.id) { S.chat.topic = 'all'; S.chat.lastGroupId = active.id; }
+  S.chat.topics = topics;
   await apiPost(`/api/telegram/groups/${active.id}/read`).catch(() => null);
   S.chat.messages = messages;
   S.chat.failed = outbox;
@@ -90,6 +116,7 @@ async function renderChat(params) {
         <nav class="cv-headtabs" aria-label="ประเภทข้อความ">
           ${CHAT_HEAD_TABS.map(([k, l]) => `<button class="cv-htab" aria-selected="${S.chat.headTab === k}" data-action="chat-htab" data-tab="${k}">${esc(l)}</button>`).join('')}
         </nav>
+        ${topicRowHtml()}
         <div class="cv-search-box" id="cvSearch" hidden>
           <input class="input" placeholder="ค้นหาในข้อความที่โหลดแล้ว" data-input="chat-msg-search" value="${esc(S.chat.search)}" aria-label="ค้นหาในแชท">
         </div>
@@ -102,6 +129,7 @@ async function renderChat(params) {
           <button class="btn sm" data-action="outbox-retry" data-id="${esc(o.id)}">ส่งซ้ำ</button></div>`).join('')}</div>` : ''}
         <form class="cv-composer" data-form="chat-send" data-group="${esc(active.id)}">
           <div class="cv-reply-bar" id="cvReplyBar">${replyBarHtml()}</div>
+          ${topicSelectHtml()}
           <div class="cv-input-row">
             <button type="button" class="btn icon ghost" disabled title="แนบไฟล์: ยังไม่พร้อมใช้งาน" aria-label="แนบไฟล์ (ยังไม่พร้อมใช้งาน)">${icon('plus')}</button>
             <textarea class="textarea cv-input" name="text" rows="1" maxlength="4000" placeholder="พิมพ์ข้อความเพื่อตอบกลับในกลุ่ม..." ${active.enabled && active.status !== 'unlinked' ? '' : 'disabled'} aria-label="ข้อความ"></textarea>
@@ -190,6 +218,7 @@ function bubbleHtml(m) {
     ${avatar}
     <div class="cv-bubble ${kind}">
       <div class="cv-meta">
+        ${S.chat.topics.length && S.chat.topic === 'all' ? `<span class="cv-topic-tag">${esc(topicName(m.threadId))}</span>` : ''}
         <b>${esc(isBot ? 'ไข่ดาว (SIINA Bot)' : m.senderName)}</b>
         ${isBot ? '<span class="cv-badge pink">บอท</span>' : ''}
         ${isTag ? '<span class="cv-badge yellow">★ แท็กถึงคุณ</span>' : ''}
@@ -207,6 +236,7 @@ function bubbleHtml(m) {
 function visibleMessages() {
   const q = S.chat.search.trim().toLowerCase();
   return S.chat.messages.filter((m) => {
+    if (S.chat.topic !== 'all' && topicOf(m) !== Number(S.chat.topic)) return false;
     if (S.chat.headTab === 'important' && !m.matched.length) return false;
     if (S.chat.headTab === 'files' && !m.attachments.length) return false;
     if (S.chat.headTab === 'links' && !/https?:\/\//i.test(m.text)) return false;
@@ -332,6 +362,14 @@ ACTIONS['chat-reply'] = (el) => {
   const input = $('.cv-input');
   if (input) input.focus();
 };
+ACTIONS['chat-topic'] = (el) => {
+  S.chat.topic = el.dataset.id;
+  $$('.cv-topic-chip').forEach((b) => b.setAttribute('aria-selected', String(b === el)));
+  const sel = document.querySelector('[name="threadId"]');
+  if (sel) sel.value = S.chat.topic === 'all' ? '' : S.chat.topic;
+  const box = $('#messages');
+  if (box) { box.innerHTML = messagesHtml(); bindMessageArea(); }
+};
 ACTIONS['chat-clear-reply'] = () => {
   S.chat.replyTo = null;
   const bar = $('#cvReplyBar');
@@ -387,7 +425,8 @@ FORMS['chat-send'] = async (form) => {
   errBox.textContent = 'กำลังส่งไปยัง Telegram...';
   errBox.style.color = '';
   try {
-    const body = { text, replyToMessageId: S.chat.replyTo ? S.chat.replyTo.messageId : null };
+    const pick = form.querySelector('[name="threadId"]');
+    const body = { text, replyToMessageId: S.chat.replyTo ? S.chat.replyTo.messageId : null, threadId: pick && pick.value ? Number(pick.value) : null };
     const result = await busy(btn, () => apiPost(`/api/telegram/groups/${form.dataset.group}/send`, body, { 'x-client-key': S.chat.draftKey }));
     if (result && result.status === 'failed') {
       errBox.textContent = 'ส่งไม่สำเร็จ: ' + (result.error || 'ไม่ทราบสาเหตุ') + ' · กดส่งซ้ำได้จากรายการด้านบน';

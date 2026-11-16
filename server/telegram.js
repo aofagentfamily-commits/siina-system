@@ -377,6 +377,27 @@ function matchFilters(user, msg, replyToSenderId, mentions, settings, attachment
   return [...reasons];
 }
 
+// Forum topics: remember the name Telegram gives each topic (service messages and first sight).
+function upsertTopic(userId, groupId, threadId, name, overwrite) {
+  if (!threadId) return;
+  const now = u.nowIso();
+  if (overwrite && name) {
+    db.prepare(`INSERT INTO telegram_topics (id, user_id, group_id, thread_id, name, updated_at) VALUES (?,?,?,?,?,?)
+      ON CONFLICT(group_id, thread_id) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`)
+      .run(u.uid(), userId, groupId, threadId, String(name).slice(0, 120), now);
+  } else {
+    db.prepare(`INSERT OR IGNORE INTO telegram_topics (id, user_id, group_id, thread_id, name, updated_at) VALUES (?,?,?,?,?,?)`)
+      .run(u.uid(), userId, groupId, threadId, String(name || `หัวข้อ #${threadId}`).slice(0, 120), now);
+  }
+  db.prepare('UPDATE telegram_groups SET is_forum = 1 WHERE id = ?').run(groupId);
+}
+
+function groupTopics(user, groupId) {
+  getGroup(user, groupId);
+  return db.prepare('SELECT thread_id, name FROM telegram_topics WHERE group_id = ? AND user_id = ? ORDER BY thread_id')
+    .all(groupId, user.id).map((t) => ({ threadId: t.thread_id, name: t.name }));
+}
+
 // Store one incoming message for every enabled group that matches this bot and chat.
 function ingestMessage(bot, msg) {
   const chatId = String(msg.chat.id);
@@ -385,6 +406,12 @@ function ingestMessage(bot, msg) {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(g.user_id);
     const exists = db.prepare('SELECT id FROM telegram_messages WHERE group_id = ? AND message_id = ?').get(g.id, msg.message_id);
     if (exists) continue; // duplicate delivery (webhook retry / polling overlap)
+    const threadId = msg.message_thread_id || null;
+    if (msg.forum_topic_created) upsertTopic(user.id, g.id, threadId, msg.forum_topic_created.name, true);
+    if (msg.forum_topic_edited && msg.forum_topic_edited.name) upsertTopic(user.id, g.id, threadId, msg.forum_topic_edited.name, true);
+    else if (threadId) upsertTopic(user.id, g.id, threadId, null, false);
+    const isTopicService = !!(msg.forum_topic_created || msg.forum_topic_edited || msg.forum_topic_closed || msg.forum_topic_reopened);
+    if (isTopicService && !(msg.text || msg.caption)) continue; // topic created/renamed notices are not conversation
     const settings = features.getSettings(user.id);
     const reply = msg.reply_to_message || null;
     const replyToSenderId = reply && reply.from ? String(reply.from.id) : null;
@@ -397,8 +424,8 @@ function ingestMessage(bot, msg) {
       ? [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || msg.from.username || 'ไม่ทราบชื่อ'
       : (msg.sender_chat ? msg.sender_chat.title : 'ไม่ทราบชื่อ');
     db.prepare(`INSERT INTO telegram_messages (id, user_id, group_id, message_id, sender_id, sender_name, sender_username, text,
-      attachments, reply_to_message_id, reply_to_sender_id, reply_to_text, matched, is_outgoing, sent_at, received_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      attachments, reply_to_message_id, reply_to_sender_id, reply_to_text, matched, is_outgoing, sent_at, received_at, thread_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       id, user.id, g.id, msg.message_id,
       msg.from ? String(msg.from.id) : null, senderName,
       msg.from && msg.from.username ? msg.from.username : null,
@@ -407,7 +434,7 @@ function ingestMessage(bot, msg) {
       reply ? reply.message_id : null, replyToSenderId,
       reply ? String(reply.text || reply.caption || '').slice(0, 300) : null,
       JSON.stringify(matched), isOutgoing,
-      new Date(msg.date * 1000).toISOString(), u.nowIso());
+      new Date(msg.date * 1000).toISOString(), u.nowIso(), threadId);
     if (!matched.length) continue;
     db.prepare(`INSERT OR IGNORE INTO notifications (id, user_id, source_type, source_id, title, body, remind_at, created_at)
       VALUES (?,?,?,?,?,?,?,?)`).run(u.uid(), user.id, 'telegram', id,
@@ -492,7 +519,7 @@ function messageDto(m) {
     text: m.text,
     attachments: JSON.parse(m.attachments).map((a) => ({ type: a.type, name: a.name, mime: a.mime, hasFile: !!a.fileId })),
     replyToMessageId: m.reply_to_message_id, replyToText: m.reply_to_text, matched: JSON.parse(m.matched),
-    isOutgoing: !!m.is_outgoing, sentAt: m.sent_at, readAt: m.read_at,
+    isOutgoing: !!m.is_outgoing, sentAt: m.sent_at, readAt: m.read_at, threadId: m.thread_id ?? null,
   };
 }
 
@@ -578,13 +605,14 @@ async function deliver(user, outboxId, eventName = 'ส่งข้อควา�
     if (!g.bot_id) throw new u.HttpError(400, 'กลุ่มนี้ยังไม่ได้เชื่อมต่อบอท', 'UNLINKED');
     bot = getBot(user, g.bot_id);
     const body = { chat_id: g.chat_id, text: o.text };
+    if (o.thread_id) body.message_thread_id = o.thread_id;
     if (o.reply_to_message_id) body.reply_parameters = { message_id: o.reply_to_message_id, allow_sending_without_reply: true };
     const sent = await callApi(botToken(bot), 'sendMessage', body);
     db.prepare("UPDATE telegram_outbox SET status='sent', telegram_message_id=?, error=NULL, updated_at=? WHERE id=?")
       .run(sent.message_id, u.nowIso(), o.id);
     db.prepare(`INSERT OR IGNORE INTO telegram_messages (id, user_id, group_id, message_id, sender_name, text, reply_to_message_id,
-      is_outgoing, sent_at, received_at, read_at) VALUES (?,?,?,?,?,?,?,1,?,?,?)`).run(
-      u.uid(), user.id, g.id, sent.message_id, bot.name, o.text, o.reply_to_message_id, u.nowIso(), u.nowIso(), u.nowIso());
+      is_outgoing, sent_at, received_at, read_at, thread_id) VALUES (?,?,?,?,?,?,?,1,?,?,?,?)`).run(
+      u.uid(), user.id, g.id, sent.message_id, bot.name, o.text, o.reply_to_message_id, u.nowIso(), u.nowIso(), u.nowIso(), o.thread_id);
     tlog(user.id, eventName, { bot: bot.name, group: g.title, detail: o.text.slice(0, 80) });
   } catch (err) {
     const message = err.message || 'ส่งข้อความไม่สำเร็จ';
@@ -601,12 +629,13 @@ async function sendMessage(user, groupId, body, clientKey) {
   const text = u.str(body.text, { max: 4000, required: true, field: 'ข้อความ' });
   const key = u.str(clientKey || body.clientKey, { max: 100, required: true, field: 'รหัสการส่ง' });
   const replyTo = body.replyToMessageId ? u.int(body.replyToMessageId, { min: 1, field: 'ข้อความที่ตอบกลับ' }) : null;
+  const threadId = body.threadId ? u.int(body.threadId, { min: 1, field: 'หัวข้อ' }) : null;
   const existing = db.prepare('SELECT * FROM telegram_outbox WHERE user_id = ? AND client_key = ?').get(user.id, key);
   if (existing) return outboxDto(existing); // double-click / retry: return the same send
   const id = u.uid();
   const now = u.nowIso();
-  db.prepare(`INSERT INTO telegram_outbox (id, user_id, group_id, text, reply_to_message_id, client_key, status, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?)`).run(id, user.id, g.id, text, replyTo, key, 'sending', now, now);
+  db.prepare(`INSERT INTO telegram_outbox (id, user_id, group_id, text, reply_to_message_id, client_key, status, created_at, updated_at, thread_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id, user.id, g.id, text, replyTo, key, 'sending', now, now, threadId);
   return deliver(user, id, 'ส่งข้อความ');
 }
 
@@ -739,7 +768,7 @@ module.exports = {
   listGroups, createGroup, updateGroup, deleteGroup, testGroup,
   processUpdate, pollAll, chatList, groupMessages, mentionList, markGroupRead, mediaFile,
   sendMessage, retryOutbox, outboxForGroup,
-  listFilters, createFilter, updateFilter, deleteFilter,
+  listFilters, createFilter, updateFilter, deleteFilter, groupTopics,
   overview, autoReplyCheck, listLogs,
   getWebhookBot: (id) => db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(id),
   publicBaseUrl,
