@@ -21,6 +21,9 @@ const DEFAULT_SETTINGS = {
   animation: 'full',
   fontScale: 100,
   sidebarCollapsed: false,
+  filterReplyToMe: true,
+  filterAttachments: false,
+  autoReply: { enabled: false, text: 'รับทราบค่ะ แจ้งไข่ดาวเรียบร้อยแล้ว' },
   categoryNotify: { work: true, appointment: true, delivery: true, deadline: true, special: true, todo: true, notice: true, personal: true },
 };
 
@@ -28,7 +31,12 @@ const DEFAULT_SETTINGS = {
 function getSettings(userId) {
   const row = db.prepare('SELECT data FROM user_settings WHERE user_id = ?').get(userId);
   const saved = row ? JSON.parse(row.data) : {};
-  return { ...DEFAULT_SETTINGS, ...saved, categoryNotify: { ...DEFAULT_SETTINGS.categoryNotify, ...(saved.categoryNotify || {}) } };
+  return {
+    ...DEFAULT_SETTINGS,
+    ...saved,
+    autoReply: { ...DEFAULT_SETTINGS.autoReply, ...(saved.autoReply || {}) },
+    categoryNotify: { ...DEFAULT_SETTINGS.categoryNotify, ...(saved.categoryNotify || {}) },
+  };
 }
 
 function updateSettings(user, body) {
@@ -40,6 +48,15 @@ function updateSettings(user, body) {
   if ('animation' in body) next.animation = u.oneOf(body.animation, ['full', 'reduced', 'off'], 'การตั้งค่า Animation');
   if ('fontScale' in body) next.fontScale = u.int(body.fontScale, { min: 90, max: 130, field: 'ขนาดตัวอักษร' });
   if ('sidebarCollapsed' in body) next.sidebarCollapsed = u.bool(body.sidebarCollapsed);
+  if ('filterReplyToMe' in body) next.filterReplyToMe = u.bool(body.filterReplyToMe);
+  if ('filterAttachments' in body) next.filterAttachments = u.bool(body.filterAttachments);
+  if (body.autoReply && typeof body.autoReply === 'object') {
+    if ('enabled' in body.autoReply) next.autoReply.enabled = u.bool(body.autoReply.enabled);
+    if ('text' in body.autoReply) {
+      const text = u.str(body.autoReply.text, { max: 300, required: true, field: 'ข้อความตอบรับ' });
+      next.autoReply.text = text;
+    }
+  }
   if (body.categoryNotify && typeof body.categoryNotify === 'object') {
     for (const c of EVENT_CATEGORIES) {
       if (c in body.categoryNotify) next.categoryNotify[c] = u.bool(body.categoryNotify[c]);

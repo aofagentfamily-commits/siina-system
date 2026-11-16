@@ -703,7 +703,7 @@ async function renderChat(params) {
         <div class="head"><b>กลุ่มทั้งหมด (${chats.length})</b></div>
         ${chats.map((c) => `
           <div class="chat-item" role="button" tabindex="0" aria-current="${c.id === active.id}" data-action="chat-open" data-id="${esc(c.id)}">
-            <span class="avatar">${esc(initials(c.title))}</span>
+            ${groupAvatar(c)}
             <div class="body">
               <div class="row1"><b>${esc(c.title)}</b><small>${c.lastAt ? esc(fmtDateTime(c.lastAt)) : ''}</small></div>
               <div class="row1"><span class="last">${esc(c.lastText || (c.enabled ? 'ยังไม่มีข้อความ' : 'ปิดการติดตาม'))}</span>
@@ -714,7 +714,7 @@ async function renderChat(params) {
       <section class="chat-main" aria-label="ข้อความในกลุ่ม">
         <div class="chat-head">
           <button class="btn icon ghost back" data-action="chat-back" aria-label="กลับ">${icon('chevLeft')}</button>
-          <span class="avatar">${esc(initials(active.title))}</span>
+          ${groupAvatar(active)}
           <div class="grow"><b class="ellipsis" style="display:block">${esc(active.title)}</b>
             <small class="muted">${active.enabled ? 'กำลังติดตามข้อความ' : 'ปิดการติดตามอยู่'}</small></div>
         </div>
@@ -986,191 +986,6 @@ FORMS.profile = async (form) => {
     toast('บันทึกโปรไฟล์แล้ว');
     rerender();
   } catch (err) { setFormError(form, err.message); }
-};
-
-async function settingsTelegram(body) {
-  const [{ items: bots }, { items: groups }, { items: filters }] = await Promise.all([
-    apiGet('/api/telegram/bots'), apiGet('/api/telegram/groups'), apiGet('/api/telegram/filters'),
-  ]);
-  const byType = (t) => filters.filter((f) => f.type === t);
-  body.innerHTML = `
-    <div class="card">
-      <div class="head"><div><h3>Telegram Bot</h3><p class="muted small">Bot Token ถูกเก็บเข้ารหัสบนเซิร์ฟเวอร์ และจะไม่แสดงเต็มในหน้าเว็บ</p></div>
-        <button class="btn primary sm" data-action="bot-new">${icon('plus', 'sm')} เพิ่มบอท</button></div>
-      ${bots.length ? `<div class="list">${bots.map((b) => `<div class="item">
-        <span class="sym-bubble">${icon('send')}</span>
-        <div class="meta"><b>${esc(b.name)}</b><small>${b.username ? '@' + esc(b.username) : 'ไม่ทราบชื่อผู้ใช้'} · Token ${esc(b.tokenHint)} · ${b.mode === 'webhook' ? 'Webhook' : 'Polling'}</small>
-          ${b.lastError ? `<small style="color:var(--danger)">${esc(b.lastError)}</small>` : ''}</div>
-        <span class="badge ${b.status === 'connected' ? 'ok dot' : b.status === 'error' ? 'danger dot' : ''}">${b.status === 'connected' ? 'เชื่อมต่อแล้ว' : b.status === 'error' ? 'มีข้อผิดพลาด' : 'ยังไม่ทราบ'}</span>
-        <div class="row wrap">
-          <button class="btn sm" data-action="bot-test" data-id="${esc(b.id)}">ทดสอบการเชื่อมต่อ</button>
-          <button class="btn sm ghost" data-action="bot-edit" data-id="${esc(b.id)}">${icon('edit', 'sm')}</button>
-          <button class="btn sm ghost" data-action="bot-delete" data-id="${esc(b.id)}" aria-label="ลบการเชื่อมต่อ">${icon('trash', 'sm')}</button>
-        </div></div>`).join('')}</div>` : emptyBox('ยังไม่มีบอท กดเพิ่มบอทเพื่อเริ่มต้น')}
-    </div>
-
-    <div class="card">
-      <div class="head"><div><h3>กลุ่ม Telegram</h3><p class="muted small">รองรับหลายกลุ่ม ต้องเพิ่มบอทเข้ากลุ่มและให้สิทธิ์ที่เหมาะสมก่อน</p></div>
-        <button class="btn primary sm" data-action="group-new" ${bots.length ? '' : 'disabled'}>${icon('plus', 'sm')} เพิ่มกลุ่ม</button></div>
-      ${groups.length ? `<div class="list">${groups.map((g) => {
-        const bot = bots.find((b) => b.id === g.botId);
-        return `<div class="item" style="cursor:default">
-          <span class="sym-bubble">${icon('chat')}</span>
-          <div class="meta"><b>${esc(g.title)}</b><small>Chat ID ${esc(g.chatId)} · บอท ${esc(bot ? bot.name : '-')}</small>
-            ${g.lastError ? `<small style="color:var(--danger)">${esc(g.lastError)}</small>` : ''}</div>
-          <span class="badge ${g.status === 'ready' ? 'ok dot' : g.status === 'error' ? 'danger dot' : ''}">${g.status === 'ready' ? 'พร้อมใช้งาน' : g.status === 'error' ? 'มีปัญหา' : 'ยังไม่ทดสอบ'}</span>
-          <label class="switch" title="เปิด / ปิดการติดตาม"><input type="checkbox" data-change="group-toggle" data-id="${esc(g.id)}" ${g.enabled ? 'checked' : ''}><span></span></label>
-          <div class="row wrap">
-            <button class="btn sm" data-action="group-test" data-id="${esc(g.id)}">ทดสอบสิทธิ์</button>
-            <button class="btn sm ghost" data-action="group-edit" data-id="${esc(g.id)}" aria-label="แก้ไขกลุ่ม">${icon('edit', 'sm')}</button>
-            <button class="btn sm ghost" data-action="group-delete" data-id="${esc(g.id)}" aria-label="ลบกลุ่ม">${icon('trash', 'sm')}</button>
-          </div></div>`;
-      }).join('')}</div>` : emptyBox('ยังไม่มีกลุ่ม')}
-    </div>
-
-    <div class="card">
-      <div class="head"><div><h3>ตัวกรองข้อความสำคัญ</h3><p class="muted small">ข้อความที่ตรงเงื่อนไขจะขึ้นในสรุปสำคัญและแจ้งเตือน</p></div></div>
-      <div class="grid-3">
-        ${filterColumn('mention', 'ข้อความที่แท็กฉัน (Username)', byType('mention'), 'เช่น myusername (ไม่ต้องมี @)')}
-        ${filterColumn('keyword', 'คำค้นหา (Keyword)', byType('keyword'), 'เช่น ด่วน, ตรวจสอบ, ส่งงาน')}
-        ${filterColumn('sender', 'ผู้ส่งที่ติดตาม (User ID)', byType('sender'), 'ตัวเลข Telegram User ID')}
-      </div>
-    </div>`;
-}
-function filterColumn(type, title, list, placeholder) {
-  return `<div class="filter-col"><h4>${esc(title)}</h4>
-    <form data-form="filter-add" data-type="${type}" class="row" style="margin-bottom:10px">
-      <input class="input grow" name="value" placeholder="${esc(placeholder)}" maxlength="100"><button class="btn primary sm" type="submit">เพิ่ม</button>
-    </form>
-    ${list.length ? `<div class="list">${list.map((f) => `<div class="item" style="cursor:default">
-      <div class="meta"><b class="ellipsis">${type === 'mention' ? '@' : ''}${esc(f.value)}</b></div>
-      <label class="switch" title="เปิด / ปิด"><input type="checkbox" data-change="filter-toggle" data-id="${esc(f.id)}" ${f.enabled ? 'checked' : ''}><span></span></label>
-      <button class="btn sm ghost" data-action="filter-delete" data-id="${esc(f.id)}" aria-label="ลบ">${icon('trash', 'sm')}</button></div>`).join('')}</div>`
-      : '<p class="muted small">ยังไม่มีรายการ</p>'}
-  </div>`;
-}
-FORMS['filter-add'] = async (form) => {
-  const value = form.querySelector('[name="value"]').value.trim();
-  if (!value) return;
-  try {
-    await apiPost('/api/telegram/filters', { type: form.dataset.type, value });
-    toast('เพิ่มตัวกรองแล้ว');
-    rerender();
-  } catch (err) { toast(err.message, 'err'); }
-};
-CHANGES['filter-toggle'] = async (el) => {
-  await apiPatch('/api/telegram/filters/' + el.dataset.id, { enabled: el.checked });
-  toast('บันทึกแล้ว');
-};
-ACTIONS['filter-delete'] = async (el) => {
-  await apiDelete('/api/telegram/filters/' + el.dataset.id);
-  rerender();
-};
-CHANGES['group-toggle'] = async (el) => {
-  try {
-    await apiPatch('/api/telegram/groups/' + el.dataset.id, { enabled: el.checked });
-    toast(el.checked ? 'เปิดการติดตามแล้ว' : 'ปิดการติดตามแล้ว');
-  } catch (err) { toast(err.message, 'err'); el.checked = !el.checked; }
-};
-
-function botForm(bot) {
-  return openModal({
-    title: bot ? 'แก้ไขบอท' : 'เพิ่มบอท Telegram',
-    body: `<form data-form="bot" data-id="${esc(bot ? bot.id : '')}" class="form-grid">
-      <label class="field full"><span>ชื่อบอท (ชื่อที่ใช้ในระบบ)</span><input class="input" name="name" maxlength="60" required value="${esc(bot ? bot.name : '')}"></label>
-      <label class="field full"><span>Bot Token ${bot ? '(เว้นว่างหากไม่ต้องการเปลี่ยน)' : ''}</span><input class="input" name="token" type="password" autocomplete="off" spellcheck="false" ${bot ? '' : 'required'} placeholder="123456:ABC-DEF..."></label>
-      <label class="field full"><span>วิธีรับข้อความ</span><select class="select" name="mode">
-        <option value="polling" ${!bot || bot.mode === 'polling' ? 'selected' : ''}>Polling (ใช้งานได้ทันทีแม้ไม่มี HTTPS สาธารณะ)</option>
-        <option value="webhook" ${bot && bot.mode === 'webhook' ? 'selected' : ''}>Webhook (ต้องตั้งค่า PUBLIC_URL แบบ HTTPS)</option>
-      </select></label>
-      <div class="full small" data-role="form-error"></div>
-      <div class="full" style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap">
-        <button type="button" class="btn ghost" data-action="close-modal">ยกเลิก</button>
-        <button type="submit" class="btn primary">บันทึก</button>
-      </div>
-    </form>`,
-  });
-}
-ACTIONS['bot-new'] = () => botForm(null);
-ACTIONS['bot-edit'] = async (el) => {
-  const { items } = await apiGet('/api/telegram/bots');
-  botForm(items.find((b) => b.id === el.dataset.id));
-};
-FORMS.bot = async (form) => {
-  const fd = new FormData(form);
-  const id = form.dataset.id;
-  const body = { name: fd.get('name'), mode: fd.get('mode') };
-  if (fd.get('token')) body.token = fd.get('token');
-  const btn = form.querySelector('[type="submit"]');
-  try {
-    await busy(btn, () => (id ? apiPatch('/api/telegram/bots/' + id, body) : apiPost('/api/telegram/bots', body)));
-    closeAllModals();
-    toast('บันทึกบอทแล้ว');
-    rerender();
-  } catch (err) { setFormError(form, err.message); }
-};
-ACTIONS['bot-test'] = async (el) => {
-  const r = await busy(el, () => apiPost(`/api/telegram/bots/${el.dataset.id}/test`));
-  toast(r.ok ? `เชื่อมต่อบอท @${r.username || ''} สำเร็จ` : 'ทดสอบไม่สำเร็จ: ' + r.message, r.ok ? 'ok' : 'err');
-  rerender();
-};
-ACTIONS['bot-delete'] = async (el) => {
-  if (!(await confirmBox('ลบการเชื่อมต่อบอทนี้? กลุ่มที่ผูกกับบอทจะถูกลบด้วย'))) return;
-  await apiDelete('/api/telegram/bots/' + el.dataset.id);
-  toast('ลบบอทแล้ว');
-  rerender();
-};
-
-function groupForm(group, bots) {
-  return openModal({
-    title: group ? 'แก้ไขกลุ่ม' : 'เพิ่มกลุ่ม Telegram',
-    body: `<form data-form="group" data-id="${esc(group ? group.id : '')}" class="form-grid">
-      ${group ? '' : `<label class="field full"><span>บอทที่ใช้</span><select class="select" name="botId" required>${bots.map((b) => `<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('')}</select></label>`}
-      <label class="field full"><span>ชื่อกลุ่ม</span><input class="input" name="title" maxlength="120" required value="${esc(group ? group.title : '')}"></label>
-      ${group ? '' : `<label class="field full"><span>Chat ID / Group ID</span><input class="input" name="chatId" required inputmode="numeric" placeholder="-1001234567890"><span class="hint">ดูได้จากบอทแชท หรือส่งข้อความในกลุ่มแล้วใช้เครื่องมือของ Telegram</span></label>`}
-      <label class="check full"><input type="checkbox" name="enabled" ${!group || group.enabled ? 'checked' : ''}> เปิดการติดตามกลุ่มนี้</label>
-      <div class="full small" data-role="form-error"></div>
-      <div class="full" style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap">
-        <button type="button" class="btn ghost" data-action="close-modal">ยกเลิก</button>
-        <button type="submit" class="btn primary">บันทึก</button>
-      </div>
-    </form>`,
-  });
-}
-ACTIONS['group-new'] = async () => {
-  const { items } = await apiGet('/api/telegram/bots');
-  groupForm(null, items);
-};
-ACTIONS['group-edit'] = async (el) => {
-  const { items } = await apiGet('/api/telegram/groups');
-  groupForm(items.find((g) => g.id === el.dataset.id), []);
-};
-FORMS.group = async (form) => {
-  const fd = new FormData(form);
-  const id = form.dataset.id;
-  const btn = form.querySelector('[type="submit"]');
-  const enabled = fd.get('enabled') === 'on';
-  try {
-    if (id) {
-      await busy(btn, () => apiPatch('/api/telegram/groups/' + id, { title: fd.get('title'), enabled }));
-    } else {
-      await busy(btn, () => apiPost('/api/telegram/groups', { botId: fd.get('botId'), title: fd.get('title'), chatId: fd.get('chatId'), enabled }));
-    }
-    closeAllModals();
-    toast('บันทึกกลุ่มแล้ว');
-    rerender();
-  } catch (err) { setFormError(form, err.message); }
-};
-ACTIONS['group-test'] = async (el) => {
-  const r = await busy(el, () => apiPost(`/api/telegram/groups/${el.dataset.id}/test`));
-  toast(r.ok ? r.message : 'ทดสอบไม่สำเร็จ: ' + r.message, r.ok ? 'ok' : 'err');
-  rerender();
-};
-ACTIONS['group-delete'] = async (el) => {
-  if (!(await confirmBox('ลบกลุ่มนี้ออกจากระบบ? ข้อความที่เก็บไว้ของกลุ่มจะถูกลบด้วย'))) return;
-  await apiDelete('/api/telegram/groups/' + el.dataset.id);
-  toast('ลบกลุ่มแล้ว');
-  rerender();
 };
 
 async function settingsNotify(body) {

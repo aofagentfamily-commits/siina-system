@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS telegram_bots (
   username TEXT,
   token_enc TEXT NOT NULL,
   token_hint TEXT NOT NULL,
+  avatar_data TEXT,
   mode TEXT NOT NULL DEFAULT 'polling',
   webhook_secret TEXT NOT NULL,
   update_offset INTEGER NOT NULL DEFAULT 0,
@@ -130,10 +131,13 @@ CREATE TABLE IF NOT EXISTS telegram_bots (
 CREATE TABLE IF NOT EXISTS telegram_groups (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  bot_id TEXT NOT NULL REFERENCES telegram_bots(id) ON DELETE CASCADE,
+  bot_id TEXT REFERENCES telegram_bots(id) ON DELETE SET NULL,
+  previous_bot_id TEXT,
   title TEXT NOT NULL,
   chat_id TEXT NOT NULL,
   enabled INTEGER NOT NULL DEFAULT 1,
+  auto_reply INTEGER NOT NULL DEFAULT 0,
+  avatar_data TEXT,
   status TEXT NOT NULL DEFAULT 'unknown',
   last_error TEXT,
   last_tested_at TEXT,
@@ -210,6 +214,18 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_logs_user ON activity_logs(user_id, created_at);
 
+CREATE TABLE IF NOT EXISTS telegram_logs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  event TEXT NOT NULL,
+  bot_name TEXT,
+  group_title TEXT,
+  status TEXT NOT NULL DEFAULT 'success',
+  detail TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_tglogs_user ON telegram_logs(user_id, created_at);
+
 CREATE TABLE IF NOT EXISTS error_logs (
   id TEXT PRIMARY KEY,
   level TEXT NOT NULL,
@@ -224,6 +240,56 @@ try {
   db.exec('ALTER TABLE users ADD COLUMN password_hash TEXT');
 } catch (_) {
   // column already exists
+}
+
+// ---- Migrations for databases created before these changes (existing rows are kept) ----
+function columnsOf(table) {
+  return db.prepare(`PRAGMA table_info(${table})`).all();
+}
+if (!columnsOf('telegram_bots').some((c) => c.name === 'avatar_data')) {
+  db.exec('ALTER TABLE telegram_bots ADD COLUMN avatar_data TEXT');
+}
+{
+  const cols = columnsOf('telegram_groups');
+  const botNotNull = cols.find((c) => c.name === 'bot_id')?.notnull === 1;
+  const missingNew = !cols.some((c) => c.name === 'avatar_data') || !cols.some((c) => c.name === 'previous_bot_id');
+  if (botNotNull || missingNew) {
+    // Back up first (consistent copy, includes WAL data).
+    const backup = path.join(DATA_DIR, `siina-before-telegram-migration-${Date.now()}.db`);
+    db.exec(`VACUUM INTO '${backup.replace(/'/g, "''")}'`);
+    db.exec('PRAGMA foreign_keys = OFF');
+    try {
+      db.exec('BEGIN');
+      db.exec(`CREATE TABLE telegram_groups_new (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        bot_id TEXT REFERENCES telegram_bots(id) ON DELETE SET NULL,
+        previous_bot_id TEXT,
+        title TEXT NOT NULL,
+        chat_id TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        auto_reply INTEGER NOT NULL DEFAULT 0,
+        avatar_data TEXT,
+        status TEXT NOT NULL DEFAULT 'unknown',
+        last_error TEXT,
+        last_tested_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(bot_id, chat_id)
+      )`);
+      db.exec(`INSERT INTO telegram_groups_new (id, user_id, bot_id, previous_bot_id, title, chat_id, enabled, auto_reply, avatar_data, status, last_error, last_tested_at, created_at, updated_at)
+        SELECT id, user_id, bot_id, NULL, title, chat_id, enabled, 0, NULL, status, last_error, last_tested_at, created_at, updated_at FROM telegram_groups`);
+      db.exec('DROP TABLE telegram_groups');
+      db.exec('ALTER TABLE telegram_groups_new RENAME TO telegram_groups');
+      if (db.prepare('PRAGMA foreign_key_check').all().length) throw new Error('foreign key check failed');
+      db.exec('COMMIT');
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    } finally {
+      db.exec('PRAGMA foreign_keys = ON');
+    }
+  }
 }
 
 module.exports = { db, DATA_DIR };

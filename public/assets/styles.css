@@ -580,3 +580,58 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .msg .media { display: block; max-width: 300px; width: 100%; max-height: 360px; height: auto; border-radius: 12px; margin-top: 6px; background: rgba(0,0,0,.2); }
 .msg .media-audio { display: block; margin-top: 6px; max-width: 280px; width: 100%; }
 .msg a.file { text-decoration: none; color: inherit; }
+
+/* ---------------------------------------------------------------- Telegram settings */
+.tg-hero { padding: 18px 22px; }
+.tg-subnav { margin: 4px 0 2px; }
+.tg-stats .stat { min-height: 136px; text-align: left; }
+.tg-stat .small { line-height: 1.4; }
+.tg-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.tg-card { display: flex; flex-direction: column; gap: 12px; }
+.tg-card.is-unlinked { border-color: rgba(255, 200, 107, .45); }
+.tg-card-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.tg-card-top h3 { font-size: 1.05rem; }
+.tg-card-top .grow { min-width: 0; }
+.tg-card-actions { gap: 8px; }
+.tg-card-actions .btn { min-height: 36px; }
+.tg-av-btn { background: none; border: 0; padding: 0; cursor: pointer; border-radius: 50%; flex: none; }
+.tg-av-btn:hover .tg-av { box-shadow: var(--glow); }
+.tg-av {
+  width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; overflow: hidden; flex: none;
+  background: rgba(255, 79, 154, .14); border: 1px solid var(--line); color: var(--pink-soft); transition: box-shadow .2s ease;
+}
+.tg-av img { width: 100%; height: 100%; object-fit: cover; }
+.tg-av-default { background: linear-gradient(135deg, rgba(255,79,154,.22), rgba(167,123,255,.2)); }
+.tg-av-default .egg-wrap { --egg: 40px; }
+.tg-av-default .egg-float { animation: none; }
+.tg-meta { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 0; font-size: .9rem; }
+.tg-meta dt { color: var(--mute); }
+.tg-meta dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.tg-meta code { font-family: ui-monospace, Menlo, monospace; color: var(--pink-soft); }
+.tg-filter-card .head h3 { display: flex; align-items: center; gap: 8px; }
+.tg-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.tg-tag {
+  display: inline-flex; align-items: center; gap: 2px; border-radius: 999px; border: 1px solid var(--line);
+  background: rgba(255,255,255,.04); color: var(--mute); transition: all .18s ease;
+}
+.tg-tag.on { background: rgba(255, 79, 154, .16); border-color: rgba(255, 79, 154, .5); color: var(--text); }
+.tg-tag-main { background: none; border: 0; color: inherit; padding: 6px 10px 6px 14px; cursor: pointer; font: inherit; }
+.tg-tag-x { background: none; border: 0; color: var(--mute); padding: 6px 10px 6px 4px; cursor: pointer; border-radius: 999px; }
+.tg-tag-x:hover { color: var(--danger); }
+.tg-tag:hover { border-color: rgba(255, 79, 154, .6); }
+.tg-log-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end; }
+.tg-log-search { grid-column: span 2; }
+.tg-log-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.av-editor { display: flex; flex-direction: column; gap: 14px; align-items: center; text-align: center; }
+.av-box { display: grid; place-items: center; }
+.av-preview {
+  width: 160px; height: 160px; border-radius: 50%; overflow: hidden; display: grid; place-items: center;
+  background: rgba(255, 79, 154, .12); border: 2px solid rgba(255, 79, 154, .5); box-shadow: var(--glow);
+}
+.av-preview img { width: 100%; height: 100%; object-fit: cover; }
+.av-preview .egg-wrap { --egg: 110px; }
+.av-editor .field { width: 100%; text-align: left; }
+@media (max-width: 640px) {
+  .tg-cards { grid-template-columns: 1fr; }
+  .tg-log-search { grid-column: auto; }
+}

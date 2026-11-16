@@ -1,15 +1,18 @@
 'use strict';
-// Telegram Bot integration: bot & group management, message ingest (webhook or polling),
-// keyword/mention/sender/reply filters, and an idempotent send-to-group outbox.
-// Bot tokens are encrypted at rest and never returned to the browser in full.
+// Telegram integration: bots, groups, message ingest (webhook or polling), filters,
+// auto-reply, media download, idempotent sends, logs.
+// Deleting a bot only unlinks its groups; groups, their settings and message history are kept.
 const fs = require('fs');
 const path = require('path');
 const { db, DATA_DIR } = require('./db');
 const u = require('./util');
+const features = require('./features');
 
 const API_BASE = 'https://api.telegram.org';
 const TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{20,}$/;
 const FILTER_TYPES = ['mention', 'keyword', 'sender'];
+const MEDIA_LIMIT = 20 * 1024 * 1024; // Bot API download limit
+const AVATAR_MAX_CHARS = 200000;
 
 class TelegramError extends Error {
   constructor(message, code) {
@@ -41,11 +44,26 @@ async function callApi(token, method, body = {}) {
   return json.result;
 }
 
+// ---------------------------------------------------------------- helpers
+function tlog(userId, event, { bot = null, group = null, status = 'success', detail = '' } = {}) {
+  db.prepare('INSERT INTO telegram_logs (id, user_id, created_at, event, bot_name, group_title, status, detail) VALUES (?,?,?,?,?,?,?,?)')
+    .run(u.uid(), userId, u.nowIso(), event, bot, group, status, String(detail).slice(0, 300));
+}
+
+function avatarOrThrow(value, field) {
+  if (value == null || value === '') return null;
+  const s = String(value);
+  if (!/^data:image\/(png|jpeg|webp);base64,/.test(s)) throw new u.HttpError(400, `${field}ต้องเป็นไฟล์ JPG, PNG หรือ WebP`, 'VALIDATION');
+  if (s.length > AVATAR_MAX_CHARS) throw new u.HttpError(400, `${field}มีขนาดใหญ่เกินไป`, 'VALIDATION');
+  return s;
+}
+
 // ---------------------------------------------------------------- bots
-function botDto(b) {
+function botDto(b, groupCount) {
   return {
-    id: b.id, name: b.name, username: b.username, tokenHint: b.token_hint, mode: b.mode,
-    status: b.status, lastError: b.last_error, createdAt: b.created_at,
+    id: b.id, name: b.name, username: b.username, tokenHint: b.token_hint, mode: b.mode, status: b.status,
+    lastError: b.last_error, createdAt: b.created_at, avatarData: b.avatar_data || null,
+    groupCount: groupCount || 0,
   };
 }
 
@@ -60,7 +78,8 @@ function botToken(bot) {
 }
 
 function listBots(user) {
-  return db.prepare('SELECT * FROM telegram_bots WHERE user_id = ? ORDER BY created_at').all(user.id).map(botDto);
+  return db.prepare(`SELECT b.*, (SELECT COUNT(*) FROM telegram_groups g WHERE g.bot_id = b.id) AS group_count
+    FROM telegram_bots b WHERE b.user_id = ? ORDER BY b.created_at`).all(user.id).map((b) => botDto(b, b.group_count));
 }
 
 async function createBot(user, body) {
@@ -74,13 +93,15 @@ async function createBot(user, body) {
   }
   const id = u.uid();
   const now = u.nowIso();
-  db.prepare(`INSERT INTO telegram_bots (id, user_id, name, username, token_enc, token_hint, mode, webhook_secret, status, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
-    .run(id, user.id, name, me.username || null, u.encrypt(token), '••••' + token.slice(-4), mode,
+  const avatar = avatarOrThrow(body.avatarData, 'รูปบอท');
+  db.prepare(`INSERT INTO telegram_bots (id, user_id, name, username, token_enc, token_hint, avatar_data, mode, webhook_secret, status, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(id, user.id, name, me.username || null, u.encrypt(token), '••••' + token.slice(-4), avatar, mode,
       u.randomToken(24), 'connected', now, now);
   u.activity(user.id, 'create', 'telegram_bot', id, name);
+  tlog(user.id, 'เพิ่มบอท', { bot: name, detail: `โหมด ${mode === 'webhook' ? 'Webhook' : 'Polling'}` });
   if (mode === 'webhook') await registerWebhook(user, id).catch(() => null);
-  return botDto(getBot(user, id));
+  return botDto(getBot(user, id), 0);
 }
 
 async function updateBot(user, id, body) {
@@ -100,18 +121,38 @@ async function updateBot(user, id, body) {
   }
   const name = body.name != null ? u.str(body.name, { max: 60, required: true, field: 'ชื่อบอท' }) : bot.name;
   const mode = body.mode != null ? u.oneOf(body.mode, ['polling', 'webhook'], 'โหมดการรับข้อความ') : bot.mode;
-  db.prepare('UPDATE telegram_bots SET name=?, username=?, token_enc=?, token_hint=?, mode=?, status=?, updated_at=? WHERE id=? AND user_id=?')
-    .run(name, username, tokenEnc, tokenHint, mode, 'connected', u.nowIso(), id, user.id);
+  const avatar = 'avatarData' in body ? avatarOrThrow(body.avatarData, 'รูปบอท') : bot.avatar_data;
+  db.prepare(`UPDATE telegram_bots SET name=?, username=?, token_enc=?, token_hint=?, mode=?, avatar_data=?, status=?, last_error=NULL, updated_at=?
+    WHERE id=? AND user_id=?`)
+    .run(name, username, tokenEnc, tokenHint, mode, avatar, 'connected', u.nowIso(), id, user.id);
   if (mode === 'webhook') await registerWebhook(user, id).catch(() => null);
   u.activity(user.id, 'update', 'telegram_bot', id, name);
-  return botDto(getBot(user, id));
+  if ('avatarData' in body && avatar !== bot.avatar_data) tlog(user.id, 'เปลี่ยนรูปบอท', { bot: name });
+  else tlog(user.id, 'แก้ไขบอท', { bot: name });
+  const count = db.prepare('SELECT COUNT(*) AS c FROM telegram_groups WHERE bot_id = ?').get(id).c;
+  return botDto(getBot(user, id), count);
 }
 
-function deleteBot(user, id) {
-  getBot(user, id);
-  db.prepare('DELETE FROM telegram_bots WHERE id = ? AND user_id = ?').run(id, user.id);
-  u.activity(user.id, 'delete', 'telegram_bot', id);
-  return { ok: true };
+// Deleting a bot unlinks its groups (bot_id -> NULL) and keeps every group, setting and message.
+async function deleteBot(user, id) {
+  const bot = getBot(user, id);
+  const count = db.prepare('SELECT COUNT(*) AS c FROM telegram_groups WHERE bot_id = ? AND user_id = ?').get(id, user.id).c;
+  if (bot.mode === 'webhook') {
+    try { await callApi(botToken(bot), 'deleteWebhook', {}); } catch (_) { /* token may already be invalid */ }
+  }
+  db.exec('BEGIN');
+  try {
+    db.prepare(`UPDATE telegram_groups SET previous_bot_id = bot_id, bot_id = NULL, status = 'unlinked', last_error = NULL, updated_at = ?
+      WHERE bot_id = ? AND user_id = ?`).run(u.nowIso(), id, user.id);
+    db.prepare('DELETE FROM telegram_bots WHERE id = ? AND user_id = ?').run(id, user.id);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+  u.activity(user.id, 'delete', 'telegram_bot', id, bot.name);
+  tlog(user.id, 'ลบบอท', { bot: bot.name, detail: `ยกเลิกการเชื่อมต่อ ${count} กลุ่ม (กลุ่มและประวัติยังอยู่)` });
+  return { ok: true, unlinkedGroups: count };
 }
 
 async function testBot(user, id) {
@@ -120,9 +161,11 @@ async function testBot(user, id) {
     const me = await callApi(botToken(bot), 'getMe');
     db.prepare('UPDATE telegram_bots SET status=?, username=?, last_error=NULL, updated_at=? WHERE id=?')
       .run('connected', me.username || null, u.nowIso(), id);
+    tlog(user.id, 'ทดสอบการเชื่อมต่อ', { bot: bot.name, detail: 'เชื่อมต่อสำเร็จ' });
     return { ok: true, username: me.username, name: me.first_name };
   } catch (err) {
     db.prepare('UPDATE telegram_bots SET status=?, last_error=?, updated_at=? WHERE id=?').run('error', err.message, u.nowIso(), id);
+    tlog(user.id, 'ทดสอบการเชื่อมต่อ', { bot: bot.name, status: 'failed', detail: err.message });
     return { ok: false, message: err.message };
   }
 }
@@ -146,25 +189,29 @@ async function registerWebhook(user, id) {
 async function setWebhookForUser(user, id) {
   await registerWebhook(user, id);
   db.prepare("UPDATE telegram_bots SET mode='webhook', updated_at=? WHERE id=? AND user_id=?").run(u.nowIso(), id, user.id);
+  tlog(user.id, 'แก้ไขบอท', { bot: getBot(user, id).name, detail: 'เปลี่ยนเป็นโหมด Webhook' });
   return { ok: true };
 }
 
 // ---------------------------------------------------------------- groups
 function groupDto(g) {
   return {
-    id: g.id, botId: g.bot_id, title: g.title, chatId: g.chat_id, enabled: !!g.enabled,
-    status: g.status, lastError: g.last_error, lastTestedAt: g.last_tested_at,
+    id: g.id, botId: g.bot_id || null, botName: g.bot_name || null, previousBotId: g.previous_bot_id || null,
+    title: g.title, chatId: g.chat_id, enabled: !!g.enabled, autoReply: !!g.auto_reply,
+    avatarData: g.avatar_data || null, status: g.bot_id ? g.status : 'unlinked',
+    lastError: g.last_error, lastTestedAt: g.last_tested_at, createdAt: g.created_at, updatedAt: g.updated_at,
   };
+}
+
+function listGroups(user) {
+  return db.prepare(`SELECT g.*, b.name AS bot_name FROM telegram_groups g
+    LEFT JOIN telegram_bots b ON b.id = g.bot_id WHERE g.user_id = ? ORDER BY g.title`).all(user.id).map(groupDto);
 }
 
 function getGroup(user, id) {
   const g = db.prepare('SELECT * FROM telegram_groups WHERE id = ? AND user_id = ?').get(id, user.id);
   if (!g) throw new u.HttpError(404, 'ไม่พบกลุ่ม', 'NOT_FOUND');
   return g;
-}
-
-function listGroups(user) {
-  return db.prepare('SELECT * FROM telegram_groups WHERE user_id = ? ORDER BY title').all(user.id).map(groupDto);
 }
 
 function createGroup(user, body) {
@@ -176,42 +223,85 @@ function createGroup(user, body) {
   if (dup) throw new u.HttpError(409, 'กลุ่มนี้ถูกเพิ่มกับบอทนี้แล้ว', 'DUPLICATE');
   const id = u.uid();
   const now = u.nowIso();
-  db.prepare(`INSERT INTO telegram_groups (id, user_id, bot_id, title, chat_id, enabled, status, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?)`).run(id, user.id, bot.id, title, chatId, u.bool(body.enabled ?? true) ? 1 : 0, 'unknown', now, now);
+  const avatar = avatarOrThrow(body.avatarData, 'รูปกลุ่ม');
+  db.prepare(`INSERT INTO telegram_groups (id, user_id, bot_id, title, chat_id, enabled, auto_reply, avatar_data, status, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(id, user.id, bot.id, title, chatId, u.bool(body.enabled ?? true) ? 1 : 0,
+    u.bool(body.autoReply) ? 1 : 0, avatar, 'unknown', now, now);
   u.activity(user.id, 'create', 'telegram_group', id, title);
-  return groupDto(getGroup(user, id));
+  tlog(user.id, 'เพิ่มกลุ่ม', { bot: bot.name, group: title });
+  return groupDto(db.prepare('SELECT g.*, b.name AS bot_name FROM telegram_groups g LEFT JOIN telegram_bots b ON b.id = g.bot_id WHERE g.id = ?').get(id));
 }
 
+// Changing the bot keeps chat_id, filters, avatar, settings and history. The new bot must be tested before "ready".
 function updateGroup(user, id, body) {
   const g = getGroup(user, id);
   const title = body.title != null ? u.str(body.title, { max: 120, required: true, field: 'ชื่อกลุ่ม' }) : g.title;
   const enabled = body.enabled != null ? (u.bool(body.enabled) ? 1 : 0) : g.enabled;
-  db.prepare('UPDATE telegram_groups SET title=?, enabled=?, updated_at=? WHERE id=? AND user_id=?')
-    .run(title, enabled, u.nowIso(), id, user.id);
-  return groupDto(getGroup(user, id));
+  const autoReply = body.autoReply != null ? (u.bool(body.autoReply) ? 1 : 0) : g.auto_reply;
+  const avatar = 'avatarData' in body ? avatarOrThrow(body.avatarData, 'รูปกลุ่ม') : g.avatar_data;
+  let botId = g.bot_id;
+  let status = g.status;
+  let lastError = g.last_error;
+  let previous = g.previous_bot_id;
+  let botChangedFrom = null;
+  let botChangedTo = null;
+  if ('botId' in body) {
+    const nextId = body.botId ? String(body.botId) : null;
+    if (nextId !== g.bot_id) {
+      if (nextId) {
+        const bot = getBot(user, nextId);
+        const dup = db.prepare('SELECT 1 FROM telegram_groups WHERE bot_id = ? AND chat_id = ? AND id != ?').get(nextId, g.chat_id, g.id);
+        if (dup) throw new u.HttpError(409, 'บอทนี้เชื่อมต่อกับกลุ่มนี้อยู่แล้ว', 'DUPLICATE');
+        botId = nextId;
+        status = 'unknown';
+        botChangedTo = bot.name;
+      } else {
+        botId = null;
+        status = 'unlinked';
+      }
+      lastError = null;
+      previous = g.bot_id || previous;
+      if (g.bot_id) botChangedFrom = db.prepare('SELECT name FROM telegram_bots WHERE id = ?').get(g.bot_id)?.name || 'บอทเดิม';
+    }
+  }
+  db.prepare(`UPDATE telegram_groups SET title=?, enabled=?, auto_reply=?, avatar_data=?, bot_id=?, previous_bot_id=?, status=?, last_error=?, updated_at=?
+    WHERE id=? AND user_id=?`).run(title, enabled, autoReply, avatar, botId, previous, status, lastError, u.nowIso(), id, user.id);
+  const updated = db.prepare('SELECT g.*, b.name AS bot_name FROM telegram_groups g LEFT JOIN telegram_bots b ON b.id = g.bot_id WHERE g.id = ?').get(id);
+  if (botChangedTo !== null || botChangedFrom !== null || (botId === null && g.bot_id)) {
+    tlog(user.id, 'เปลี่ยนบอท', { group: title, bot: botChangedTo, detail: `${botChangedFrom || 'ไม่มีบอท'} → ${botChangedTo || 'ไม่มีบอท'}` });
+  }
+  if ('avatarData' in body && avatar !== g.avatar_data) tlog(user.id, 'เปลี่ยนรูปกลุ่ม', { group: title });
+  if (title !== g.title || enabled !== g.enabled || autoReply !== g.auto_reply) tlog(user.id, 'แก้ไขกลุ่ม', { group: title, detail: `ติดตาม ${enabled ? 'เปิด' : 'ปิด'} · ตอบรับอัตโนมัติ ${autoReply ? 'เปิด' : 'ปิด'}` });
+  return groupDto(updated);
 }
 
 function deleteGroup(user, id) {
-  getGroup(user, id);
+  const g = getGroup(user, id);
   db.prepare('DELETE FROM telegram_groups WHERE id = ? AND user_id = ?').run(id, user.id);
-  u.activity(user.id, 'delete', 'telegram_group', id);
+  u.activity(user.id, 'delete', 'telegram_group', id, g.title);
+  tlog(user.id, 'ลบกลุ่ม', { group: g.title });
   return { ok: true };
 }
 
 // Checks that the bot can see the chat and whether it can post in it.
 async function testGroup(user, id) {
   const g = getGroup(user, id);
+  if (!g.bot_id) {
+    saveGroupTest(id, false, 'ยังไม่ได้เชื่อมต่อบอท', null);
+    tlog(user.id, 'ทดสอบสิทธิ์', { group: g.title, status: 'failed', detail: 'ยังไม่ได้เชื่อมต่อบอท' });
+    return { ok: false, message: 'ยังไม่ได้เชื่อมต่อบอท กรุณาเลือกบอทก่อน' };
+  }
   const bot = getBot(user, g.bot_id);
   const token = botToken(bot);
   const me = await callApi(token, 'getMe').catch((err) => ({ id: null, error: err.message }));
-  if (!me.id) return saveGroupTest(id, false, 'ไม่สามารถอ่านข้อมูลบอทได้', null);
+  if (!me.id) return finishGroupTest(user, g, id, false, 'ไม่สามารถอ่านข้อมูลบอทได้', null);
   let chat;
   let member;
   try {
     chat = await callApi(token, 'getChat', { chat_id: g.chat_id });
     member = await callApi(token, 'getChatMember', { chat_id: g.chat_id, user_id: me.id });
   } catch (err) {
-    return saveGroupTest(id, false, err.message, null);
+    return finishGroupTest(user, g, id, false, err.message, null);
   }
   const status = member.status;
   const isAdmin = status === 'administrator' || status === 'creator';
@@ -220,7 +310,13 @@ async function testGroup(user, id) {
     ? 'บอทอ่านและส่งข้อความได้' + (isAdmin ? '' : ' (แนะนำให้ตั้งบอทเป็นแอดมินเพื่อรับข้อความทั้งหมด)')
     : 'บอทไม่มีสิทธิ์ส่งข้อความในกลุ่มนี้';
   if (chat.title) db.prepare('UPDATE telegram_groups SET title=? WHERE id=?').run(chat.title, id);
-  return saveGroupTest(id, canPost, message, { title: chat.title, botStatus: status, isAdmin });
+  return finishGroupTest(user, g, id, canPost, message, { title: chat.title, botStatus: status, isAdmin });
+}
+
+function finishGroupTest(user, g, id, ok, message, info) {
+  const res = saveGroupTest(id, ok, message, info);
+  tlog(user.id, 'ทดสอบสิทธิ์', { group: g.title, bot: getBot(user, g.bot_id).name, status: ok ? 'success' : 'failed', detail: message });
+  return res;
 }
 
 function saveGroupTest(id, ok, message, info) {
@@ -230,14 +326,12 @@ function saveGroupTest(id, ok, message, info) {
 }
 
 // ---------------------------------------------------------------- ingest
-const MEDIA_LIMIT = 20 * 1024 * 1024; // Bot API download limit
-
-// Keeps what is needed to fetch the file later (file_id stays on the server, never sent to the browser).
+// Attachments keep what is needed to fetch the file later. file_id never reaches the browser.
 function attachmentsOf(msg) {
   const list = [];
   const push = (type, name, f, mime) => {
     if (!f || !f.file_id) return;
-    if (f.file_unique_id && list.some((x) => x.uniqueId === f.file_unique_id)) return; // same file sent twice
+    if (f.file_unique_id && list.some((x) => x.uniqueId === f.file_unique_id)) return;
     list.push({ type, name, fileId: f.file_id, uniqueId: f.file_unique_id || null, mime, size: f.file_size || 0 });
   };
   if (msg.photo && msg.photo.length) push('photo', 'รูปภาพ', msg.photo[msg.photo.length - 1], 'image/jpeg');
@@ -246,42 +340,13 @@ function attachmentsOf(msg) {
     const mime = st.is_animated ? 'application/x-tgsticker' : st.is_video ? 'video/webm' : 'image/webp';
     push('sticker', st.emoji ? `สติกเกอร์ ${st.emoji}` : 'สติกเกอร์', st, mime);
   }
-  push('animation', msg.animation && msg.animation.file_name || 'GIF', msg.animation, 'video/mp4');
-  push('video', msg.video && msg.video.file_name || 'วิดีโอ', msg.video, 'video/mp4');
+  push('animation', (msg.animation && msg.animation.file_name) || 'GIF', msg.animation, 'video/mp4');
+  push('video', (msg.video && msg.video.file_name) || 'วิดีโอ', msg.video, 'video/mp4');
   push('voice', 'ข้อความเสียง', msg.voice, 'audio/ogg');
-  push('audio', msg.audio && msg.audio.file_name || 'เสียง', msg.audio, 'audio/mpeg');
-  push('document', msg.document && msg.document.file_name || 'ไฟล์', msg.document, (msg.document && msg.document.mime_type) || 'application/octet-stream');
+  push('audio', (msg.audio && msg.audio.file_name) || 'เสียง', msg.audio, 'audio/mpeg');
+  push('document', (msg.document && msg.document.file_name) || 'ไฟล์', msg.document,
+    (msg.document && msg.document.mime_type) || 'application/octet-stream');
   return list;
-}
-
-// Downloads an attachment from Telegram once and keeps it in DATA_DIR/media.
-async function mediaFile(user, rowId, index) {
-  const row = db.prepare(`SELECT m.attachments, g.bot_id FROM telegram_messages m
-    JOIN telegram_groups g ON g.id = m.group_id WHERE m.id = ? AND m.user_id = ?`).get(rowId, user.id);
-  if (!row) throw new u.HttpError(404, 'ไม่พบไฟล์', 'NOT_FOUND');
-  const att = JSON.parse(row.attachments)[index];
-  if (!att || !att.fileId || !att.uniqueId || !/^[A-Za-z0-9_-]{1,100}$/.test(att.uniqueId)) {
-    throw new u.HttpError(404, 'ไฟล์นี้แสดงไม่ได้ (เก็บก่อนเปิดระบบรับไฟล์)', 'NO_FILE');
-  }
-  if (att.size > MEDIA_LIMIT) throw new u.HttpError(413, 'ไฟล์ใหญ่เกิน 20 MB แสดงไม่ได้', 'TOO_LARGE');
-  const dir = path.join(DATA_DIR, 'media');
-  fs.mkdirSync(dir, { recursive: true });
-  const cachePath = path.join(dir, att.uniqueId);
-  if (!fs.existsSync(cachePath)) {
-    const bot = db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(row.bot_id);
-    const token = botToken(bot);
-    const info = await callApi(token, 'getFile', { file_id: att.fileId });
-    if (!info.file_path) throw new u.HttpError(404, 'ไม่พบไฟล์บน Telegram', 'NOT_FOUND');
-    let res;
-    try {
-      res = await fetch(`${API_BASE}/file/bot${token}/${info.file_path}`, { signal: AbortSignal.timeout(30000) });
-    } catch (err) {
-      throw new TelegramError('ดาวน์โหลดไฟล์จาก Telegram ไม่สำเร็จ', 'NETWORK');
-    }
-    if (!res.ok) throw new TelegramError('ดาวน์โหลดไฟล์จาก Telegram ไม่สำเร็จ', 'FILE');
-    fs.writeFileSync(cachePath, Buffer.from(await res.arrayBuffer()));
-  }
-  return { path: cachePath, mime: att.mime };
 }
 
 function mentionsIn(msg) {
@@ -295,7 +360,7 @@ function mentionsIn(msg) {
   return { names, ids };
 }
 
-function matchFilters(user, msg, replyToSenderId, mentions) {
+function matchFilters(user, msg, replyToSenderId, mentions, settings, attachments) {
   const filters = db.prepare('SELECT type, value FROM telegram_filters WHERE user_id = ? AND enabled = 1').all(user.id);
   const text = (msg.text || msg.caption || '').toLowerCase();
   const reasons = new Set();
@@ -306,43 +371,52 @@ function matchFilters(user, msg, replyToSenderId, mentions) {
     if (f.type === 'keyword' && text.includes(f.value.toLowerCase())) reasons.add('keyword');
     if (f.type === 'sender' && senderId && senderId === f.value) reasons.add('sender');
   }
-  if (myId && replyToSenderId && replyToSenderId === myId) reasons.add('reply_to_me');
+  if (settings.filterReplyToMe && myId && replyToSenderId === myId) reasons.add('reply_to_me');
   if (myId && mentions.ids.has(myId)) reasons.add('mention');
+  if (settings.filterAttachments && attachments.length) reasons.add('attachment');
   return [...reasons];
 }
 
-// Store one incoming Telegram message for every enabled group that matches the bot + chat.
+// Store one incoming message for every enabled group that matches this bot and chat.
 function ingestMessage(bot, msg) {
   const chatId = String(msg.chat.id);
   const groups = db.prepare('SELECT * FROM telegram_groups WHERE bot_id = ? AND chat_id = ? AND enabled = 1').all(bot.id, chatId);
   for (const g of groups) {
     const user = db.prepare('SELECT * FROM users WHERE id = ?').get(g.user_id);
     const exists = db.prepare('SELECT id FROM telegram_messages WHERE group_id = ? AND message_id = ?').get(g.id, msg.message_id);
-    if (exists) continue; // dedupe: same message delivered twice (webhook retry / polling overlap)
+    if (exists) continue; // duplicate delivery (webhook retry / polling overlap)
+    const settings = features.getSettings(user.id);
     const reply = msg.reply_to_message || null;
     const replyToSenderId = reply && reply.from ? String(reply.from.id) : null;
     const mentions = mentionsIn(msg);
-    const matched = matchFilters(user, msg, replyToSenderId, mentions);
+    const attachments = attachmentsOf(msg);
+    const matched = matchFilters(user, msg, replyToSenderId, mentions, settings, attachments);
     const isOutgoing = msg.from && bot.username && msg.from.username === bot.username ? 1 : 0;
     const id = u.uid();
+    const senderName = msg.from
+      ? [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || msg.from.username || 'ไม่ทราบชื่อ'
+      : (msg.sender_chat ? msg.sender_chat.title : 'ไม่ทราบชื่อ');
     db.prepare(`INSERT INTO telegram_messages (id, user_id, group_id, message_id, sender_id, sender_name, sender_username, text,
       attachments, reply_to_message_id, reply_to_sender_id, reply_to_text, matched, is_outgoing, sent_at, received_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       id, user.id, g.id, msg.message_id,
-      msg.from ? String(msg.from.id) : null,
-      msg.from ? [msg.from.first_name, msg.from.last_name].filter(Boolean).join(' ') || msg.from.username || 'ไม่ทราบชื่อ' : (msg.sender_chat ? msg.sender_chat.title : 'ไม่ทราบชื่อ'),
+      msg.from ? String(msg.from.id) : null, senderName,
       msg.from && msg.from.username ? msg.from.username : null,
       String(msg.text || msg.caption || '').slice(0, 4000),
-      JSON.stringify(attachmentsOf(msg)),
+      JSON.stringify(attachments),
       reply ? reply.message_id : null, replyToSenderId,
       reply ? String(reply.text || reply.caption || '').slice(0, 300) : null,
       JSON.stringify(matched), isOutgoing,
       new Date(msg.date * 1000).toISOString(), u.nowIso());
-    if (matched.length) {
-      db.prepare(`INSERT OR IGNORE INTO notifications (id, user_id, source_type, source_id, title, body, remind_at, created_at)
-        VALUES (?,?,?,?,?,?,?,?)`).run(u.uid(), user.id, 'telegram', id,
-        `ข้อความสำคัญจาก ${g.title}`, String(msg.text || msg.caption || '(ไฟล์แนบ)').slice(0, 140),
-        u.nowIso(), u.nowIso());
+    if (!matched.length) continue;
+    db.prepare(`INSERT OR IGNORE INTO notifications (id, user_id, source_type, source_id, title, body, remind_at, created_at)
+      VALUES (?,?,?,?,?,?,?,?)`).run(u.uid(), user.id, 'telegram', id,
+      `ข้อความสำคัญจาก ${g.title}`, String(msg.text || msg.caption || '(ไฟล์แนบ)').slice(0, 140),
+      u.nowIso(), u.nowIso());
+    if (matched.includes('mention')) {
+      tlog(user.id, 'ตรวจพบข้อความแท็ก', { bot: bot.name, group: g.title, detail: `${senderName}: ${String(msg.text || msg.caption || '(ไฟล์แนบ)').slice(0, 80)}` });
+      const canAutoReply = g.auto_reply && settings.autoReply.enabled && msg.from && !msg.from.is_bot && !isOutgoing;
+      if (canAutoReply) scheduleAutoReply(user.id, g.id, msg.message_id, settings.autoReply.text);
     }
   }
 }
@@ -356,7 +430,7 @@ function processUpdate(bot, update) {
 async function pollBot(bot) {
   const token = botToken(bot);
   const updates = await callApi(token, 'getUpdates', {
-    offset: bot.update_offset + 1 || undefined,
+    offset: bot.update_offset + 1,
     timeout: 0,
     allowed_updates: ['message', 'edited_message'],
   });
@@ -382,16 +456,31 @@ async function pollAll() {
   }
 }
 
-// ---------------------------------------------------------------- messages & chat list
+// ---------------------------------------------------------------- auto reply
+// Runs after the message is stored. The outbox key makes each tagged message reply at most once.
+function scheduleAutoReply(userId, groupId, messageId, text) {
+  setImmediate(() => {
+    const key = `auto:${groupId}:${messageId}`;
+    if (db.prepare('SELECT 1 FROM telegram_outbox WHERE user_id = ? AND client_key = ?').get(userId, key)) return;
+    const id = u.uid();
+    const now = u.nowIso();
+    db.prepare(`INSERT INTO telegram_outbox (id, user_id, group_id, text, reply_to_message_id, client_key, status, created_at, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`).run(id, userId, groupId, text, messageId, key, 'sending', now, now);
+    deliver({ id: userId }, id, 'ตอบรับอัตโนมัติ').catch((err) => u.logError(err.message, 'telegram.autoReply'));
+  });
+}
+
+// ---------------------------------------------------------------- chat list, messages, media
 function chatList(user) {
   return db.prepare(`
-    SELECT g.id, g.title, g.enabled, g.status,
+    SELECT g.id, g.title, g.enabled, g.status, g.bot_id, g.avatar_data,
       (SELECT text FROM telegram_messages m WHERE m.group_id = g.id ORDER BY sent_at DESC LIMIT 1) AS last_text,
       (SELECT sent_at FROM telegram_messages m WHERE m.group_id = g.id ORDER BY sent_at DESC LIMIT 1) AS last_at,
       (SELECT COUNT(*) FROM telegram_messages m WHERE m.group_id = g.id AND m.read_at IS NULL AND m.is_outgoing = 0) AS unread,
       (SELECT COUNT(*) FROM telegram_messages m WHERE m.group_id = g.id AND m.read_at IS NULL AND m.is_outgoing = 0 AND m.matched != '[]') AS mentions
     FROM telegram_groups g WHERE g.user_id = ? ORDER BY last_at DESC NULLS LAST, g.title`).all(user.id).map((r) => ({
-    id: r.id, title: r.title, enabled: !!r.enabled, status: r.status,
+    id: r.id, title: r.title, enabled: !!r.enabled, status: r.bot_id ? r.status : 'unlinked',
+    avatarData: r.avatar_data || null,
     lastText: r.last_text ? r.last_text.slice(0, 120) : '', lastAt: r.last_at,
     unread: r.unread, mentions: r.mentions,
   }));
@@ -405,9 +494,10 @@ function groupMessages(user, groupId, q) {
     AND (? IS NULL OR message_id < ?) ORDER BY message_id DESC LIMIT ?`).all(groupId, user.id, before, before, limit);
   return rows.reverse().map((m) => ({
     id: m.id, messageId: m.message_id, senderId: m.sender_id, senderName: m.sender_name,
-    text: m.text, attachments: JSON.parse(m.attachments).map((a) => ({ type: a.type, name: a.name, mime: a.mime, hasFile: !!a.fileId })), replyToMessageId: m.reply_to_message_id,
-    replyToText: m.reply_to_text, matched: JSON.parse(m.matched), isOutgoing: !!m.is_outgoing,
-    sentAt: m.sent_at, readAt: m.read_at,
+    text: m.text,
+    attachments: JSON.parse(m.attachments).map((a) => ({ type: a.type, name: a.name, mime: a.mime, hasFile: !!a.fileId })),
+    replyToMessageId: m.reply_to_message_id, replyToText: m.reply_to_text, matched: JSON.parse(m.matched),
+    isOutgoing: !!m.is_outgoing, sentAt: m.sent_at, readAt: m.read_at,
   }));
 }
 
@@ -417,16 +507,51 @@ function markGroupRead(user, groupId) {
   return { ok: true };
 }
 
+// Downloads an attachment from Telegram once and keeps it in DATA_DIR/media.
+async function mediaFile(user, rowId, index) {
+  const row = db.prepare(`SELECT m.attachments, g.bot_id FROM telegram_messages m
+    JOIN telegram_groups g ON g.id = m.group_id WHERE m.id = ? AND m.user_id = ?`).get(rowId, user.id);
+  if (!row) throw new u.HttpError(404, 'ไม่พบไฟล์', 'NOT_FOUND');
+  const att = JSON.parse(row.attachments)[index];
+  if (!att || !att.fileId || !att.uniqueId || !/^[A-Za-z0-9_-]{1,100}$/.test(att.uniqueId)) {
+    throw new u.HttpError(404, 'ไฟล์นี้แสดงไม่ได้ (เก็บก่อนเปิดระบบรับไฟล์)', 'NO_FILE');
+  }
+  if (att.size > MEDIA_LIMIT) throw new u.HttpError(413, 'ไฟล์ใหญ่เกิน 20 MB แสดงไม่ได้', 'TOO_LARGE');
+  const dir = path.join(DATA_DIR, 'media');
+  fs.mkdirSync(dir, { recursive: true });
+  const cachePath = path.join(dir, att.uniqueId);
+  if (!fs.existsSync(cachePath)) {
+    if (!row.bot_id) throw new u.HttpError(400, 'กลุ่มนี้ยังไม่ได้เชื่อมต่อบอท', 'UNLINKED');
+    const bot = db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(row.bot_id);
+    const token = botToken(bot);
+    const info = await callApi(token, 'getFile', { file_id: att.fileId });
+    if (!info.file_path) throw new u.HttpError(404, 'ไม่พบไฟล์บน Telegram', 'NOT_FOUND');
+    let res;
+    try {
+      res = await fetch(`${API_BASE}/file/bot${token}/${info.file_path}`, { signal: AbortSignal.timeout(30000) });
+    } catch (err) {
+      throw new TelegramError('ดาวน์โหลดไฟล์จาก Telegram ไม่สำเร็จ', 'NETWORK');
+    }
+    if (!res.ok) throw new TelegramError('ดาวน์โหลดไฟล์จาก Telegram ไม่สำเร็จ', 'FILE');
+    fs.writeFileSync(cachePath, Buffer.from(await res.arrayBuffer()));
+  }
+  return { path: cachePath, mime: att.mime };
+}
+
 // ---------------------------------------------------------------- send (outbox, idempotent)
 function outboxDto(o) {
   return { id: o.id, groupId: o.group_id, text: o.text, replyToMessageId: o.reply_to_message_id, status: o.status, error: o.error, createdAt: o.created_at };
 }
 
-async function deliver(user, outboxId) {
+// Sends one outbox row. eventName decides how the attempt is written to the logs.
+async function deliver(user, outboxId, eventName = 'ส่งข้อความ') {
   const o = db.prepare('SELECT * FROM telegram_outbox WHERE id = ? AND user_id = ?').get(outboxId, user.id);
-  const g = getGroup(user, o.group_id);
-  const bot = getBot(user, g.bot_id);
+  let g;
+  let bot;
   try {
+    g = getGroup(user, o.group_id);
+    if (!g.bot_id) throw new u.HttpError(400, 'กลุ่มนี้ยังไม่ได้เชื่อมต่อบอท', 'UNLINKED');
+    bot = getBot(user, g.bot_id);
     const body = { chat_id: g.chat_id, text: o.text };
     if (o.reply_to_message_id) body.reply_parameters = { message_id: o.reply_to_message_id, allow_sending_without_reply: true };
     const sent = await callApi(botToken(bot), 'sendMessage', body);
@@ -435,8 +560,11 @@ async function deliver(user, outboxId) {
     db.prepare(`INSERT OR IGNORE INTO telegram_messages (id, user_id, group_id, message_id, sender_name, text, reply_to_message_id,
       is_outgoing, sent_at, received_at, read_at) VALUES (?,?,?,?,?,?,?,1,?,?,?)`).run(
       u.uid(), user.id, g.id, sent.message_id, bot.name, o.text, o.reply_to_message_id, u.nowIso(), u.nowIso(), u.nowIso());
+    tlog(user.id, eventName, { bot: bot.name, group: g.title, detail: o.text.slice(0, 80) });
   } catch (err) {
-    db.prepare("UPDATE telegram_outbox SET status='failed', error=?, updated_at=? WHERE id=?").run(err.message, u.nowIso(), o.id);
+    const message = err.message || 'ส่งข้อความไม่สำเร็จ';
+    db.prepare("UPDATE telegram_outbox SET status='failed', error=?, updated_at=? WHERE id=?").run(message, u.nowIso(), o.id);
+    tlog(user.id, eventName, { bot: bot ? bot.name : null, group: g ? g.title : null, status: 'failed', detail: message });
   }
   return outboxDto(db.prepare('SELECT * FROM telegram_outbox WHERE id = ?').get(o.id));
 }
@@ -444,6 +572,7 @@ async function deliver(user, outboxId) {
 async function sendMessage(user, groupId, body, clientKey) {
   const g = getGroup(user, groupId);
   if (!g.enabled) throw new u.HttpError(400, 'กลุ่มนี้ปิดการติดตามอยู่ เปิดก่อนจึงจะส่งได้', 'DISABLED');
+  if (!g.bot_id) throw new u.HttpError(400, 'กลุ่มนี้ยังไม่ได้เชื่อมต่อบอท เลือกบอทก่อนส่งข้อความ', 'UNLINKED');
   const text = u.str(body.text, { max: 4000, required: true, field: 'ข้อความ' });
   const key = u.str(clientKey || body.clientKey, { max: 100, required: true, field: 'รหัสการส่ง' });
   const replyTo = body.replyToMessageId ? u.int(body.replyToMessageId, { min: 1, field: 'ข้อความที่ตอบกลับ' }) : null;
@@ -453,7 +582,7 @@ async function sendMessage(user, groupId, body, clientKey) {
   const now = u.nowIso();
   db.prepare(`INSERT INTO telegram_outbox (id, user_id, group_id, text, reply_to_message_id, client_key, status, created_at, updated_at)
     VALUES (?,?,?,?,?,?,?,?,?)`).run(id, user.id, g.id, text, replyTo, key, 'sending', now, now);
-  return deliver(user, id);
+  return deliver(user, id, 'ส่งข้อความ');
 }
 
 async function retryOutbox(user, id) {
@@ -461,11 +590,11 @@ async function retryOutbox(user, id) {
   if (!o) throw new u.HttpError(404, 'ไม่พบข้อความ', 'NOT_FOUND');
   if (o.status !== 'failed') throw new u.HttpError(400, 'ข้อความนี้ส่งสำเร็จแล้วหรือกำลังส่งอยู่', 'INVALID_STATE');
   db.prepare("UPDATE telegram_outbox SET status='sending', updated_at=? WHERE id=?").run(u.nowIso(), id);
-  return deliver(user, id);
+  return deliver(user, id, 'ส่งข้อความ');
 }
 
 function outboxForGroup(user, groupId) {
-  return db.prepare("SELECT * FROM telegram_outbox WHERE user_id = ? AND group_id = ? AND status != 'sent' ORDER BY created_at DESC LIMIT 20")
+  return db.prepare("SELECT * FROM telegram_outbox WHERE user_id = ? AND group_id = ? AND status != 'sent' AND client_key NOT LIKE 'auto:%' ORDER BY created_at DESC LIMIT 20")
     .all(user.id, groupId).map(outboxDto);
 }
 
@@ -478,7 +607,7 @@ function listFilters(user) {
 
 function createFilter(user, body) {
   const type = u.oneOf(body.type, [...FILTER_TYPES, 'reply_to_me'], 'ประเภทตัวกรอง');
-  if (type === 'reply_to_me') throw new u.HttpError(400, 'การตอบกลับข้อความของฉันใช้ Telegram User ID ในหน้าตั้งค่าโปรไฟล์', 'VALIDATION');
+  if (type === 'reply_to_me') throw new u.HttpError(400, 'การตอบกลับข้อความของฉันใช้ตัวเลือกในหมวดตัวกรองเพิ่มเติม', 'VALIDATION');
   let value = u.str(body.value, { max: 100, required: true, field: 'คำค้นหา' });
   if (type === 'mention') value = value.replace(/^@/, '').toLowerCase();
   if (type === 'sender' && !/^\d{1,20}$/.test(value)) throw new u.HttpError(400, 'Telegram User ID ต้องเป็นตัวเลข', 'VALIDATION');
@@ -506,11 +635,87 @@ function deleteFilter(user, id) {
   return { ok: true };
 }
 
+// ---------------------------------------------------------------- overview, auto-reply check, logs
+function overview(user) {
+  const bots = db.prepare('SELECT status FROM telegram_bots WHERE user_id = ?').all(user.id);
+  const groups = db.prepare('SELECT enabled, bot_id, auto_reply FROM telegram_groups WHERE user_id = ?').all(user.id);
+  const filters = db.prepare('SELECT enabled FROM telegram_filters WHERE user_id = ?').all(user.id);
+  const settings = features.getSettings(user.id);
+  return {
+    bots: { total: bots.length, ready: bots.filter((b) => b.status === 'connected').length },
+    groups: { total: groups.length, enabled: groups.filter((g) => g.enabled).length, unlinked: groups.filter((g) => !g.bot_id).length },
+    filters: { total: filters.length, enabled: filters.filter((f) => f.enabled).length },
+    autoReply: {
+      enabled: settings.autoReply.enabled,
+      text: settings.autoReply.text,
+      groupsOn: groups.filter((g) => g.auto_reply && g.bot_id).length,
+    },
+    recentLogs: listLogs(user, { limit: '5' }),
+  };
+}
+
+// Checks a group's auto-reply setup and reports the latest real result from stored data.
+function autoReplyCheck(user, groupId) {
+  const g = db.prepare(`SELECT g.*, b.name AS bot_name FROM telegram_groups g LEFT JOIN telegram_bots b ON b.id = g.bot_id
+    WHERE g.id = ? AND g.user_id = ?`).get(groupId, user.id);
+  if (!g) throw new u.HttpError(404, 'ไม่พบกลุ่ม', 'NOT_FOUND');
+  const settings = features.getSettings(user.id);
+  const mentionFilters = db.prepare("SELECT COUNT(*) AS c FROM telegram_filters WHERE user_id = ? AND type = 'mention' AND enabled = 1").get(user.id).c;
+  const checks = [
+    { label: 'เปิดตอบรับอัตโนมัติ (ทั้งระบบ)', ok: settings.autoReply.enabled },
+    { label: 'เปิดตอบรับในกลุ่มนี้', ok: !!g.auto_reply },
+    { label: 'กลุ่มเปิดการติดตามอยู่', ok: !!g.enabled },
+    { label: 'มีบอทเชื่อมต่อและทดสอบสิทธิ์แล้ว', ok: !!g.bot_id && g.status === 'ready' },
+    { label: 'มี Username ที่ติดตามอย่างน้อย 1 รายการ', ok: mentionFilters > 0 },
+    { label: 'มีข้อความตอบรับ', ok: !!settings.autoReply.text },
+  ];
+  const lastMention = db.prepare(`SELECT sender_name, text, sent_at FROM telegram_messages
+    WHERE group_id = ? AND user_id = ? AND is_outgoing = 0 AND matched LIKE '%"mention"%' ORDER BY sent_at DESC LIMIT 1`).get(g.id, user.id);
+  const lastReply = db.prepare(`SELECT status, error, created_at FROM telegram_outbox
+    WHERE user_id = ? AND group_id = ? AND client_key LIKE 'auto:%' ORDER BY created_at DESC LIMIT 1`).get(user.id, g.id);
+  return {
+    ready: checks.every((c) => c.ok),
+    checks,
+    lastMention: lastMention ? { senderName: lastMention.sender_name, text: lastMention.text.slice(0, 120), sentAt: lastMention.sent_at, saved: true } : null,
+    lastReply: lastReply ? { status: lastReply.status, error: lastReply.error, at: lastReply.created_at } : null,
+  };
+}
+
+function listLogs(user, q) {
+  const where = ['user_id = ?'];
+  const params = [user.id];
+  const tz = user.timezone || 'Asia/Bangkok';
+  if (q.from) {
+    where.push('created_at >= ?');
+    params.push(u.zonedToIso(u.dateReq(q.from, 'วันที่เริ่มต้น'), '00:00', tz));
+  }
+  if (q.to) {
+    where.push('created_at < ?');
+    params.push(u.zonedToIso(u.addDays(u.dateReq(q.to, 'วันที่สิ้นสุด'), 1), '00:00', tz));
+  }
+  if (q.event) { where.push('event = ?'); params.push(String(q.event).slice(0, 60)); }
+  if (q.bot) { where.push('bot_name = ?'); params.push(String(q.bot).slice(0, 120)); }
+  if (q.group) { where.push('group_title = ?'); params.push(String(q.group).slice(0, 120)); }
+  if (q.status) { where.push('status = ?'); params.push(u.oneOf(q.status, ['success', 'failed'], 'สถานะ')); }
+  if (q.q) {
+    const like = `%${String(q.q).slice(0, 80).replace(/[%_]/g, '')}%`;
+    where.push('(detail LIKE ? OR event LIKE ? OR bot_name LIKE ? OR group_title LIKE ?)');
+    params.push(like, like, like, like);
+  }
+  const limit = u.int(q.limit || 200, { min: 1, max: 500, field: 'จำนวนรายการ' });
+  return db.prepare(`SELECT id, created_at, event, bot_name, group_title, status, detail FROM telegram_logs
+    WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT ${limit}`).all(...params).map((r) => ({
+    id: r.id, at: r.created_at, event: r.event, bot: r.bot_name, group: r.group_title, status: r.status, detail: r.detail,
+  }));
+}
+
 module.exports = {
   TelegramError, listBots, createBot, updateBot, deleteBot, testBot, setWebhookForUser,
   listGroups, createGroup, updateGroup, deleteGroup, testGroup,
-  processUpdate, pollAll, chatList, groupMessages, mediaFile, markGroupRead, sendMessage, retryOutbox, outboxForGroup,
+  processUpdate, pollAll, chatList, groupMessages, markGroupRead, mediaFile,
+  sendMessage, retryOutbox, outboxForGroup,
   listFilters, createFilter, updateFilter, deleteFilter,
-  getBot, getWebhookBot: (id) => db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(id),
+  overview, autoReplyCheck, listLogs,
+  getWebhookBot: (id) => db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(id),
   publicBaseUrl,
 };
