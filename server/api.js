@@ -5,10 +5,12 @@ const { HttpError, logError } = require('./util');
 const auth = require('./auth');
 const f = require('./features');
 const tg = require('./telegram');
+const tpl = require('./templates');
 const { db } = require('./db');
 const u = require('./util');
 
 const MAX_BODY = 1024 * 1024; // 1 MB (avatars and project images are capped separately)
+const MAX_UPLOAD_BODY = 72 * 1024 * 1024; // file uploads arrive as base64 (50 MB file)
 const WRITE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
 const ROUTES = [];
@@ -79,6 +81,15 @@ add('PATCH', '/api/telegram/groups/:id', (c) => tg.updateGroup(c.user, c.params.
 add('DELETE', '/api/telegram/groups/:id', (c) => tg.deleteGroup(c.user, c.params.id));
 add('POST', '/api/telegram/groups/:id/test', (c) => tg.testGroup(c.user, c.params.id));
 add('GET', '/api/telegram/mentions', (c) => ({ items: tg.mentionList(c.user) }));
+add('GET', '/api/telegram/templates', (c) => ({ items: tpl.listTemplates(c.user, c.query) }));
+add('POST', '/api/telegram/templates', (c) => tpl.createTemplate(c.user, c.body));
+add('PATCH', '/api/telegram/templates/:id', (c) => tpl.updateTemplate(c.user, c.params.id, c.body));
+add('DELETE', '/api/telegram/templates/:id', (c) => tpl.deleteTemplate(c.user, c.params.id));
+add('GET', '/api/telegram/stickers', (c) => ({ items: tpl.listStickers(c.user) }));
+add('POST', '/api/telegram/stickers', (c) => tpl.addSticker(c.user, c.body));
+add('DELETE', '/api/telegram/stickers/:id', (c) => tpl.deleteSticker(c.user, c.params.id));
+add('POST', '/api/telegram/groups/:id/send-file', (c) => tg.sendFile(c.user, c.params.id, c.body));
+add('POST', '/api/telegram/groups/:id/send-sticker', (c) => tg.sendSticker(c.user, c.params.id, c.body));
 add('GET', '/api/telegram/overview', (c) => tg.overview(c.user));
 add('GET', '/api/telegram/logs', (c) => ({ items: tg.listLogs(c.user, c.query) }));
 add('POST', '/api/telegram/autoreply/check', (c) => tg.autoReplyCheck(c.user, c.body.groupId));
@@ -146,13 +157,13 @@ function compile(method, pathname) {
   return null;
 }
 
-function readBody(req) {
+function readBody(req, limit = MAX_BODY) {
   return new Promise((resolve, reject) => {
     const chunks = [];
     let size = 0;
     req.on('data', (chunk) => {
       size += chunk.length;
-      if (size > MAX_BODY) {
+      if (size > limit) {
         reject(new HttpError(413, 'ข้อมูลที่ส่งมีขนาดใหญ่เกินไป', 'PAYLOAD_TOO_LARGE'));
         req.destroy();
         return;
@@ -199,7 +210,7 @@ async function handleApi(req, res, url) {
   if (WRITE_METHODS.includes(req.method) && hasBody && !String(req.headers['content-type'] || '').includes('application/json')) {
     throw new HttpError(415, 'ต้องส่งข้อมูลในรูปแบบ application/json', 'UNSUPPORTED_MEDIA');
   }
-  const body = WRITE_METHODS.includes(req.method) ? await readBody(req) : {};
+  const body = WRITE_METHODS.includes(req.method) ? await readBody(req, url.pathname.endsWith('/send-file') ? MAX_UPLOAD_BODY : MAX_BODY) : {};
   const ip = req.socket.remoteAddress || 'unknown';
   const token = auth.readCookie(req, auth.COOKIE_NAME);
   const user = route.auth ? auth.userFromToken(token) : null;

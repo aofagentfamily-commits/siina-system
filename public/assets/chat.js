@@ -71,7 +71,7 @@ async function renderChat(params) {
     apiGet(`/api/telegram/groups/${active.id}/outbox`),
     apiGet(`/api/telegram/groups/${active.id}/topics`),
   ]);
-  if (S.chat.lastGroupId !== active.id) { S.chat.topic = 'all'; S.chat.lastGroupId = active.id; }
+  if (S.chat.lastGroupId !== active.id) { S.chat.topic = 'all'; S.chat.lastGroupId = active.id; S.chat.draft = null; }
   S.chat.topics = topics;
   await apiPost(`/api/telegram/groups/${active.id}/read`).catch(() => null);
   S.chat.messages = messages;
@@ -133,8 +133,17 @@ async function renderChat(params) {
         <form class="cv-composer" data-form="chat-send" data-group="${esc(active.id)}">
           <div class="cv-reply-bar" id="cvReplyBar">${replyBarHtml()}</div>
           ${topicHintHtml()}
+          <div id="cvDraft" class="cv-draft"></div>
           <div class="cv-input-row">
-            <button type="button" class="btn icon ghost" disabled title="แนบไฟล์: ยังไม่พร้อมใช้งาน" aria-label="แนบไฟล์ (ยังไม่พร้อมใช้งาน)">${icon('plus')}</button>
+            <div class="cv-plus-wrap">
+              <button type="button" class="cv-plus" id="cvPlus" data-action="chat-plus" aria-haspopup="menu" aria-expanded="false" aria-label="เพิ่มเครื่องมือส่งข้อความ"
+                ${active.enabled && active.status !== 'unlinked' ? '' : 'disabled'}>${icon('plus')}</button>
+              <div class="cv-plus-menu" id="cvPlusMenu" role="menu" hidden>
+                <button type="button" role="menuitem" data-action="chat-menu-file">${icon('image')}<span>รูปภาพ / ไฟล์</span></button>
+                <button type="button" role="menuitem" data-action="chat-menu-templates">${icon('file')}<span>เทมเพลตข้อความ</span></button>
+                <button type="button" role="menuitem" data-action="chat-menu-stickers">${icon('heart')}<span>สติกเกอร์</span></button>
+              </div>
+            </div>
             <textarea class="textarea cv-input" name="text" rows="1" maxlength="4000" placeholder="พิมพ์ข้อความเพื่อตอบกลับในกลุ่ม..." ${active.enabled && active.status !== 'unlinked' ? '' : 'disabled'} aria-label="ข้อความ"></textarea>
             <button type="button" class="btn icon ghost" disabled title="อีโมจิ: ยังไม่พร้อมใช้งาน" aria-label="อีโมจิ (ยังไม่พร้อมใช้งาน)">${icon('heart')}</button>
             <button class="btn primary cv-send" type="submit" aria-label="ส่งข้อความ" ${active.enabled && active.status !== 'unlinked' ? '' : 'disabled'}>${icon('send')}</button>
@@ -458,7 +467,8 @@ FORMS['chat-send'] = async (form) => {
   errBox.textContent = 'กำลังส่งไปยัง Telegram...';
   errBox.style.color = '';
   try {
-    const body = { text, replyToMessageId: S.chat.replyTo ? S.chat.replyTo.messageId : null, threadId: S.chat.topic !== 'all' ? Number(S.chat.topic) : null };
+    const formatted = S.chat.draft && S.chat.draft.text === text ? S.chat.draft.html : null;
+    const body = { text, formatted, replyToMessageId: S.chat.replyTo ? S.chat.replyTo.messageId : null, threadId: S.chat.topic !== 'all' ? Number(S.chat.topic) : null };
     const result = await busy(btn, () => apiPost(`/api/telegram/groups/${form.dataset.group}/send`, body, { 'x-client-key': S.chat.draftKey }));
     if (result && result.status === 'failed') {
       errBox.textContent = 'ส่งไม่สำเร็จ: ' + (result.error || 'ไม่ทราบสาเหตุ') + ' · กดส่งซ้ำได้จากรายการด้านบน';
@@ -469,6 +479,8 @@ FORMS['chat-send'] = async (form) => {
     }
     S.chat.draftKey = null;
     S.chat.replyTo = null;
+    S.chat.draft = null;
+    renderDraft();
     form.querySelector('[name="text"]').value = '';
     errBox.textContent = '';
     await refreshChatMessages();
@@ -484,6 +496,10 @@ FORMS['chat-send'] = async (form) => {
 document.addEventListener('input', (e) => {
   const t = e.target;
   if (!t.dataset) return;
+  if (t.classList && t.classList.contains('cv-input') && S.chat.draft && t.value !== S.chat.draft.text) {
+    S.chat.draft = null;
+    renderDraft();
+  }
   if (t.dataset.input === 'chat-search') {
     S.chat.listQuery = t.value;
     const items = $('#cvItems');

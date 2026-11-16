@@ -224,6 +224,26 @@ CREATE TABLE IF NOT EXISTS telegram_topics (
   UNIQUE(group_id, thread_id)
 );
 
+CREATE TABLE IF NOT EXISTS telegram_templates (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  formatted_html TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tpl_user ON telegram_templates(user_id, title);
+
+CREATE TABLE IF NOT EXISTS telegram_stickers (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  file_id TEXT NOT NULL,
+  label TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(user_id, file_id)
+);
+
 CREATE TABLE IF NOT EXISTS telegram_logs (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -309,6 +329,10 @@ for (const [table, col, def] of [
   ['telegram_groups', 'is_forum', 'INTEGER NOT NULL DEFAULT 0'],
 ]) {
   if (!columnsOf(table).some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+}
+
+if (!columnsOf('telegram_outbox').some((c) => c.name === 'html')) {
+  db.exec('ALTER TABLE telegram_outbox ADD COLUMN html TEXT');
 }
 
 module.exports = { db, DATA_DIR };

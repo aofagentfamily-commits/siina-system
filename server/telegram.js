@@ -8,6 +8,7 @@ const { db, DATA_DIR } = require('./db');
 const u = require('./util');
 const features = require('./features');
 const { EventEmitter } = require('events');
+const templates = require('./templates');
 
 // Live updates: every change to a user's Telegram data is published here; api.js streams it to the browser.
 const bus = new EventEmitter();
@@ -626,7 +627,8 @@ async function deliver(user, outboxId, eventName = 'ส่งข้อควา�
     g = getGroup(user, o.group_id);
     if (!g.bot_id) throw new u.HttpError(400, 'กลุ่มนี้ยังไม่ได้เชื่อมต่อบอท', 'UNLINKED');
     bot = getBot(user, g.bot_id);
-    const body = { chat_id: g.chat_id, text: o.text };
+    const body = { chat_id: g.chat_id, text: o.html || o.text };
+    if (o.html) body.parse_mode = 'HTML';
     if (o.thread_id) body.message_thread_id = o.thread_id;
     if (o.reply_to_message_id) body.reply_parameters = { message_id: o.reply_to_message_id, allow_sending_without_reply: true };
     const sent = await callApi(botToken(bot), 'sendMessage', body);
@@ -655,10 +657,16 @@ async function sendMessage(user, groupId, body, clientKey) {
   const threadId = body.threadId ? u.int(body.threadId, { min: 1, field: 'หัวข้อ' }) : null;
   const existing = db.prepare('SELECT * FROM telegram_outbox WHERE user_id = ? AND client_key = ?').get(user.id, key);
   if (existing) return outboxDto(existing); // double-click / retry: return the same send
+  // Formatting is used only when the text still matches the template exactly.
+  let html = null;
+  if (body.formatted && templates.plainFromHtml(String(body.formatted)) === text) {
+    html = templates.telegramHtml(String(body.formatted));
+    if (html.length > 4096) throw new u.HttpError(400, 'ข้อความยาวเกินที่ Telegram รองรับ', 'TOO_LONG');
+  }
   const id = u.uid();
   const now = u.nowIso();
-  db.prepare(`INSERT INTO telegram_outbox (id, user_id, group_id, text, reply_to_message_id, client_key, status, created_at, updated_at, thread_id)
-    VALUES (?,?,?,?,?,?,?,?,?,?)`).run(id, user.id, g.id, text, replyTo, key, 'sending', now, now, threadId);
+  db.prepare(`INSERT INTO telegram_outbox (id, user_id, group_id, text, reply_to_message_id, client_key, status, created_at, updated_at, thread_id, html)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(id, user.id, g.id, text, replyTo, key, 'sending', now, now, threadId, html);
   return deliver(user, id, 'ส่งข้อความ');
 }
 
@@ -673,6 +681,79 @@ async function retryOutbox(user, id) {
 function outboxForGroup(user, groupId) {
   return db.prepare("SELECT * FROM telegram_outbox WHERE user_id = ? AND group_id = ? AND status != 'sent' AND client_key NOT LIKE 'auto:%' ORDER BY created_at DESC LIMIT 20")
     .all(user.id, groupId).map(outboxDto);
+}
+
+// ---------------------------------------------------------------- files and stickers
+const FILE_LIMIT_IMAGE = 10 * 1024 * 1024;
+const FILE_LIMIT_DOC = 50 * 1024 * 1024;
+
+function sentFile(user, g, bot, sent, kind, name, mime, size, caption, threadId) {
+  const fileObj = sent.photo ? sent.photo[sent.photo.length - 1] : sent.sticker || sent.document;
+  db.prepare(`INSERT OR IGNORE INTO telegram_messages (id, user_id, group_id, message_id, sender_name, text, attachments,
+    is_outgoing, sent_at, received_at, read_at, thread_id) VALUES (?,?,?,?,?,?,?,1,?,?,?,?)`).run(
+    u.uid(), user.id, g.id, sent.message_id, bot.name, caption || '',
+    JSON.stringify([{ type: kind, name, mime, size, fileId: fileObj ? fileObj.file_id : null, uniqueId: fileObj ? fileObj.file_unique_id : null }]),
+    u.nowIso(), u.nowIso(), u.nowIso(), threadId);
+  publish(user.id, { groupId: g.id, kind: 'sent' });
+}
+
+async function sendFile(user, groupId, body) {
+  const g = getGroup(user, groupId);
+  if (!g.enabled) throw new u.HttpError(400, 'กลุ่มนี้ปิดการติดตามอยู่', 'DISABLED');
+  if (!g.bot_id) throw new u.HttpError(400, 'กลุ่มนี้ยังไม่ได้เชื่อมต่อบอท', 'UNLINKED');
+  const bot = getBot(user, g.bot_id);
+  const name = u.str(body.fileName, { max: 200, required: true, field: 'ชื่อไฟล์' });
+  const mime = u.str(body.mime, { max: 120, field: 'ประเภทไฟล์' }) || 'application/octet-stream';
+  const match = /^data:([^;,]+);base64,([A-Za-z0-9+/=]+)$/.exec(String(body.dataUrl || ''));
+  if (!match) throw new u.HttpError(400, 'ไฟล์ไม่ถูกต้อง', 'VALIDATION');
+  const buffer = Buffer.from(match[2], 'base64');
+  if (!buffer.length) throw new u.HttpError(400, 'ไฟล์ว่างเปล่า', 'VALIDATION');
+  const isImage = mime === 'image/jpeg' || mime === 'image/png';
+  const limit = isImage ? FILE_LIMIT_IMAGE : FILE_LIMIT_DOC;
+  if (buffer.length > limit) throw new u.HttpError(413, `ไฟล์ใหญ่เกินกำหนด (สูงสุด ${limit / 1024 / 1024} MB)`, 'TOO_LARGE');
+  const caption = body.caption ? u.str(body.caption, { max: 1024, field: 'คำบรรยาย' }) : '';
+  const threadId = body.threadId ? u.int(body.threadId, { min: 1, field: 'หัวข้อ' }) : null;
+  const replyTo = body.replyToMessageId ? u.int(body.replyToMessageId, { min: 1, field: 'ข้อความที่ตอบกลับ' }) : null;
+  const token = botToken(bot);
+  const form = new FormData();
+  form.append('chat_id', g.chat_id);
+  if (threadId) form.append('message_thread_id', String(threadId));
+  if (caption) form.append('caption', caption);
+  if (replyTo) form.append('reply_parameters', JSON.stringify({ message_id: replyTo, allow_sending_without_reply: true }));
+  const field = isImage ? 'photo' : 'document';
+  form.append(field, new Blob([buffer], { type: mime }), name);
+  const kind = isImage ? 'photo' : 'document';
+  try {
+    const res = await fetch(`${API_BASE}/bot${token}/${isImage ? 'sendPhoto' : 'sendDocument'}`, { method: 'POST', body: form, signal: AbortSignal.timeout(120000) });
+    const json = await res.json().catch(() => ({ ok: false, description: 'invalid response' }));
+    if (!json.ok) throw new TelegramError(scrub(json.description || 'ส่งไฟล์ไม่สำเร็จ', token), json.error_code);
+    sentFile(user, g, bot, json.result, kind, name, mime, buffer.length, caption, threadId);
+    tlog(user.id, 'ส่งไฟล์', { bot: bot.name, group: g.title, detail: name });
+    return { ok: true, messageId: json.result.message_id };
+  } catch (err) {
+    tlog(user.id, 'ส่งไฟล์', { bot: bot.name, group: g.title, status: 'failed', detail: `${name}: ${err.message}` });
+    throw err instanceof TelegramError ? new u.HttpError(502, 'ส่งไฟล์ไม่สำเร็จ: ' + err.message + ' · กดส่งใหม่ได้', 'TELEGRAM') : err;
+  }
+}
+
+async function sendSticker(user, groupId, body) {
+  const g = getGroup(user, groupId);
+  if (!g.enabled) throw new u.HttpError(400, 'กลุ่มนี้ปิดการติดตามอยู่', 'DISABLED');
+  if (!g.bot_id) throw new u.HttpError(400, 'กลุ่มนี้ยังไม่ได้เชื่อมต่อบอท', 'UNLINKED');
+  const sticker = templates.getSticker(user, u.str(body.stickerId, { max: 64, required: true, field: 'สติกเกอร์' }));
+  const bot = getBot(user, g.bot_id);
+  const threadId = body.threadId ? u.int(body.threadId, { min: 1, field: 'หัวข้อ' }) : null;
+  const payload = { chat_id: g.chat_id, sticker: sticker.file_id };
+  if (threadId) payload.message_thread_id = threadId;
+  try {
+    const sent = await callApi(botToken(bot), 'sendSticker', payload);
+    sentFile(user, g, bot, sent, 'sticker', sticker.label || 'สติกเกอร์', 'image/webp', 0, '', threadId);
+    tlog(user.id, 'ส่งสติกเกอร์', { bot: bot.name, group: g.title });
+    return { ok: true, messageId: sent.message_id };
+  } catch (err) {
+    tlog(user.id, 'ส่งสติกเกอร์', { bot: bot.name, group: g.title, status: 'failed', detail: err.message });
+    throw new u.HttpError(502, 'ส่งสติกเกอร์ไม่สำเร็จ: ' + err.message, 'TELEGRAM');
+  }
 }
 
 // ---------------------------------------------------------------- filters
@@ -792,7 +873,7 @@ module.exports = {
   processUpdate, pollAll, chatList, groupMessages, mentionList, markGroupRead, mediaFile,
   sendMessage, retryOutbox, outboxForGroup,
   listFilters, createFilter, updateFilter, deleteFilter, groupTopics, renameTopic,
-  overview, autoReplyCheck, listLogs, subscribe,
+  overview, autoReplyCheck, listLogs, subscribe, sendFile, sendSticker,
   getWebhookBot: (id) => db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(id),
   publicBaseUrl,
 };
