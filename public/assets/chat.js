@@ -221,7 +221,7 @@ function attachmentsHtml(m, src) {
 function bubbleHtml(m) {
   const isBot = m.isOutgoing;
   const isTag = !isBot && m.matched.includes('mention');
-  const kind = isBot ? 'cv-bot' : isTag ? 'cv-tagged' : 'cv-normal';
+  const kind = isBot ? 'cv-bot' : isTag ? (m.ackedAt ? 'cv-tagged is-acked' : 'cv-tagged') : 'cv-normal';
   const reasonBadge = !isBot && m.matched.includes('reply_to_me') ? '<span class="cv-badge purple">ตอบกลับคุณ</span>' : '';
   const avatar = isBot
     ? `<span class="cv-av cv-av-bot">${eggHtml({ size: 40 })}</span>`
@@ -263,6 +263,9 @@ ACTIONS['chat-ack'] = async (el) => {
     const m = S.chat.messages.find((x) => x.id === el.dataset.id);
     if (m) m.ackedAt = r.ackedAt;
     el.dataset.acked = String(!wasAcked);
+    const bubble = el.closest('.cv-bubble');
+    if (bubble) bubble.classList.toggle('is-acked', !wasAcked);
+    updateJumpButton();
     el.classList.toggle('is-acked', !wasAcked);
     el.setAttribute('aria-pressed', String(!wasAcked));
     el.title = !wasAcked ? 'รับทราบแล้ว' : 'กดเพื่อรับทราบ';
@@ -343,7 +346,7 @@ function updateJumpButton() {
   if (!box || !btn) return;
   const top = box.scrollTop;
   const bottom = top + box.clientHeight;
-  const tagged = [...box.querySelectorAll('.cv-tagged')];
+  const tagged = [...box.querySelectorAll('.cv-tagged:not(.is-acked)')];
   const offscreen = tagged.filter((el) => el.offsetTop + el.offsetHeight < top + 4 || el.offsetTop > bottom - 4);
   btn.hidden = offscreen.length === 0;
   const below = offscreen.some((el) => el.offsetTop > bottom);
@@ -464,7 +467,7 @@ ACTIONS['chat-jump-next'] = () => {
   if (!box) return;
   const top = box.scrollTop;
   const bottom = top + box.clientHeight;
-  const tagged = [...box.querySelectorAll('.cv-tagged')];
+  const tagged = [...box.querySelectorAll('.cv-tagged:not(.is-acked)')];
   const below = tagged.filter((el) => el.offsetTop > bottom - 4);
   const above = tagged.filter((el) => el.offsetTop + el.offsetHeight < top + 4);
   const target = below.length ? below[0] : above[above.length - 1];

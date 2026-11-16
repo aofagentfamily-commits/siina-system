@@ -1000,3 +1000,5 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* taller chat frame: more messages visible */
 .cv-layout { height: calc(100vh - 185px); min-height: 560px; }
 @media (max-width: 1023px) { .cv-layout { height: auto; min-height: 560px; } }
+
+.cv-tagged.is-acked { box-shadow: 0 0 0 1px rgba(126, 224, 181, .25); }
