@@ -402,10 +402,16 @@ CHANGES['tg-group-auto'] = async (el) => {
 };
 
 // ---------------------------------------------------------------- avatar editor (bot and group pictures)
-function cropSquare(img, zoom) {
-  const side = Math.min(img.naturalWidth, img.naturalHeight) / zoom;
-  const sx = (img.naturalWidth - side) / 2;
-  const sy = (img.naturalHeight - side) / 2;
+// Crops a square from the picture. offX/offY (-1..1) move the window across the free space,
+// zoom makes the window smaller. The user moves the picture by dragging it.
+function cropSquare(img, zoom, offX = 0, offY = 0) {
+  const w = img.naturalWidth;
+  const h = img.naturalHeight;
+  const side = Math.min(w, h) / zoom;
+  const slackX = (w - side) / 2;
+  const slackY = (h - side) / 2;
+  const sx = slackX + offX * slackX;
+  const sy = slackY + offY * slackY;
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 256;
@@ -421,7 +427,7 @@ function openAvatarEditor({ title, current, fallback, onSave }) {
     title,
     body: `<div class="av-editor">
       <div id="avBox" class="av-box">${preview(current)}</div>
-      <p class="muted small">รองรับ JPG, PNG, WebP (ไม่เกิน 5 MB) ระบบครอบเป็นสี่เหลี่ยมจัตุรัสจากตรงกลางให้อัตโนมัติ และแสดงผลเป็นวงกลม ใช้แถบซูมเพื่อครอบเข้าไปได้</p>
+      <p class="muted small">รองรับ JPG, PNG, WebP (ไม่เกิน 5 MB) <b>ลากรูปเพื่อปรับตำแหน่ง</b> และใช้แถบซูมเพื่อขยาย</p>
       <div class="row wrap">
         <label class="btn sm primary" style="cursor:pointer">${icon('upload', 'sm')} เปลี่ยนรูป<input type="file" id="avFile" accept="image/jpeg,image/png,image/webp" hidden></label>
         <button class="btn sm danger" type="button" id="avRemove">${icon('trash2', 'sm')} ลบรูป</button>
@@ -437,9 +443,11 @@ function openAvatarEditor({ title, current, fallback, onSave }) {
   const error = overlay.querySelector('#avError');
   const zoomWrap = overlay.querySelector('#avZoomWrap');
   const zoomInput = overlay.querySelector('#avZoom');
+  let offX = 0;
+  let offY = 0;
   const render = () => {
     if (!image) return;
-    result = cropSquare(image, Number(zoomInput.value));
+    result = cropSquare(image, Number(zoomInput.value), offX, offY);
     box.innerHTML = preview(result);
     save.disabled = false;
   };
@@ -454,6 +462,8 @@ function openAvatarEditor({ title, current, fallback, onSave }) {
       const img = new Image();
       img.onload = () => {
         image = img;
+        offX = 0;
+        offY = 0;
         zoomInput.value = 1;
         zoomWrap.hidden = false;
         render();
@@ -464,6 +474,25 @@ function openAvatarEditor({ title, current, fallback, onSave }) {
     reader.readAsDataURL(file);
   });
   zoomInput.addEventListener('input', render);
+  // Drag the picture to choose what stays inside the square.
+  let drag = null;
+  let frame = 0;
+  const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(render); };
+  box.addEventListener('pointerdown', (ev) => {
+    if (!image) return;
+    drag = { x: ev.clientX, y: ev.clientY, ox: offX, oy: offY };
+    box.setPointerCapture(ev.pointerId);
+    box.classList.add('is-dragging');
+  });
+  box.addEventListener('pointermove', (ev) => {
+    if (!drag) return;
+    offX = Math.max(-1, Math.min(1, drag.ox - (ev.clientX - drag.x) / 90));
+    offY = Math.max(-1, Math.min(1, drag.oy - (ev.clientY - drag.y) / 90));
+    schedule();
+  });
+  const endDrag = () => { drag = null; box.classList.remove('is-dragging'); };
+  box.addEventListener('pointerup', endDrag);
+  box.addEventListener('pointercancel', endDrag);
   overlay.querySelector('#avRemove').addEventListener('click', () => {
     image = null;
     result = null;
