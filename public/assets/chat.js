@@ -24,7 +24,11 @@ function topicOf(m) {
 function topicRowHtml() {
   if (!S.chat.topics.length) return '';
   const items = [['all', 'ทั้งหมด']].concat(S.chat.topics.map((t) => [String(t.threadId), t.name === 'General' ? 'ทั่วไป' : t.name]));
-  return `<nav class="cv-topics" aria-label="หัวข้อในกลุ่ม">${items.map(([k, l]) => `<button class="cv-topic-chip" aria-selected="${S.chat.topic === k}" data-action="chat-topic" data-id="${esc(k)}">${icon('chat', 'sm')} ${esc(l)}</button>`).join('')}</nav>`;
+  const unnamed = (id) => /^หัวข้อ #/.test(id);
+  return `<nav class="cv-topics" aria-label="หัวข้อในกลุ่ม">${items.map(([k, l]) => `<span class="cv-topic-wrap">
+      <button class="cv-topic-chip" aria-selected="${S.chat.topic === k}" data-action="chat-topic" data-id="${esc(k)}">${icon('chat', 'sm')} ${esc(l)}</button>
+      ${k !== 'all' && k !== '1' ? `<button class="cv-topic-edit ${unnamed(l) ? 'needs-name' : ''}" data-action="chat-topic-rename" data-thread="${esc(k)}" data-name="${esc(l)}" aria-label="แก้ชื่อหัวข้อ ${esc(l)}" title="แก้ชื่อหัวข้อ">${icon('edit', 'sm')}${unnamed(l) ? ' ตั้งชื่อ' : ''}</button>` : ''}
+    </span>`).join('')}</nav>`;
 }
 function topicSelectHtml() {
   if (!S.chat.topics.length) return '';
@@ -369,6 +373,30 @@ ACTIONS['chat-topic'] = (el) => {
   if (sel) sel.value = S.chat.topic === 'all' ? '' : S.chat.topic;
   const box = $('#messages');
   if (box) { box.innerHTML = messagesHtml(); bindMessageArea(); }
+};
+ACTIONS['chat-topic-rename'] = (el) => {
+  const threadId = el.dataset.thread;
+  const current = el.dataset.name.startsWith('หัวข้อ #') ? '' : el.dataset.name;
+  openModal({
+    title: 'ตั้งชื่อหัวข้อ',
+    body: `<form data-form="chat-topic-rename" data-group="${esc(S.chat.groupId)}" data-thread="${esc(threadId)}" class="stack">
+      <p class="muted small">Telegram ไม่ได้ส่งชื่อหัวข้อนี้มาให้ระบบ จึงตั้งชื่อเองได้ที่นี่ (ชื่อในแอปเท่านั้น ไม่เปลี่ยนชื่อใน Telegram)</p>
+      <label class="field"><span>ชื่อหัวข้อ</span><input class="input" name="name" maxlength="120" required value="${esc(current)}" placeholder="เช่น HR999"></label>
+      <p class="small" data-role="form-error"></p>
+      <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-action="close-modal">ยกเลิก</button>
+        <button type="submit" class="btn primary">บันทึกชื่อ</button></div>
+    </form>`,
+  });
+};
+FORMS['chat-topic-rename'] = async (form) => {
+  const name = form.querySelector('[name="name"]').value.trim();
+  const btn = form.querySelector('[type="submit"]');
+  try {
+    await busy(btn, () => apiPatch(`/api/telegram/groups/${form.dataset.group}/topics/${form.dataset.thread}`, { name }));
+    closeAllModals();
+    toast('บันทึกชื่อหัวข้อแล้ว');
+    renderChat({ group: S.chat.groupId });
+  } catch (err) { setFormError(form, err.message); }
 };
 ACTIONS['chat-clear-reply'] = () => {
   S.chat.replyTo = null;

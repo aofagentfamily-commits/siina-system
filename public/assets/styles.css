@@ -847,3 +847,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .cv-topic-pick { display: flex; align-items: center; gap: 8px; color: #D7CEDB; font-size: .88rem; }
 .cv-topic-pick select { max-width: 220px; min-height: 40px; }
 .cv-topic-tag { background: rgba(255, 183, 213, .18); color: #FFB7D5; border-radius: 6px; padding: 0 6px; font-size: .74rem; font-weight: 600; }
+
+.cv-topic-wrap { display: inline-flex; align-items: center; gap: 4px; }
+.cv-topic-edit { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 0 8px; border-radius: 10px; border: 1.5px dashed #FFB7D5; background: transparent; color: #FFE4F0; font: inherit; font-size: .8rem; cursor: pointer; white-space: nowrap; }
+.cv-topic-edit.needs-name { border-color: #FFD633; color: #FFD633; font-weight: 600; }
+.cv-topic-edit:hover { border-style: solid; border-color: #FF4F9A; }

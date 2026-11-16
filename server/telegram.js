@@ -392,6 +392,14 @@ function upsertTopic(userId, groupId, threadId, name, overwrite) {
   db.prepare('UPDATE telegram_groups SET is_forum = 1 WHERE id = ?').run(groupId);
 }
 
+// The user can give a topic a name when Telegram never sent one (topics created before the bot joined).
+function renameTopic(user, groupId, threadId, name) {
+  getGroup(user, groupId);
+  const clean = u.str(name, { max: 120, required: true, field: 'ชื่อหัวข้อ' });
+  upsertTopic(user.id, groupId, u.int(threadId, { min: 2, field: 'หัวข้อ' }), clean, true);
+  return { ok: true, name: clean };
+}
+
 function groupTopics(user, groupId) {
   getGroup(user, groupId);
   return db.prepare('SELECT thread_id, name FROM telegram_topics WHERE group_id = ? AND user_id = ? ORDER BY thread_id')
@@ -768,7 +776,7 @@ module.exports = {
   listGroups, createGroup, updateGroup, deleteGroup, testGroup,
   processUpdate, pollAll, chatList, groupMessages, mentionList, markGroupRead, mediaFile,
   sendMessage, retryOutbox, outboxForGroup,
-  listFilters, createFilter, updateFilter, deleteFilter, groupTopics,
+  listFilters, createFilter, updateFilter, deleteFilter, groupTopics, renameTopic,
   overview, autoReplyCheck, listLogs,
   getWebhookBot: (id) => db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(id),
   publicBaseUrl,
