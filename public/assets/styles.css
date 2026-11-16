@@ -831,3 +831,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tab[aria-selected="true"] { color: #FFFFFF; }
 .setting-row { border-bottom-color: rgba(255, 183, 213, .35); }
 .switch span { background: #6B4A70; }
+
+/* calendar grid and week columns: clearer cells */
+.cal-grid { background: rgba(255, 255, 255, .08); border: 1.5px solid rgba(255, 183, 213, .45); }
+.cal-cell { border-right-color: rgba(255, 183, 213, .3); border-bottom-color: rgba(255, 183, 213, .3); }
+.cal-dow { background: rgba(255, 79, 154, .25); color: #FFFFFF; font-weight: 600; border-bottom-color: rgba(255, 183, 213, .45); }
+.week-col { background: rgba(255, 255, 255, .08); border: 1.5px solid rgba(255, 183, 213, .4); }
+.cal-side label { color: #FFFFFF; }
+.hero { border: 1.5px solid rgba(255, 79, 154, .55); }
