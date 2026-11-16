@@ -467,7 +467,7 @@ FORMS['chat-send'] = async (form) => {
   errBox.textContent = 'กำลังส่งไปยัง Telegram...';
   errBox.style.color = '';
   try {
-    const formatted = S.chat.draft && S.chat.draft.text === text ? S.chat.draft.html : null;
+    const formatted = S.chat.draft && S.chat.draft.mode === 'formatted' && S.chat.draft.html && S.chat.draft.text === text ? S.chat.draft.html : null;
     const body = { text, formatted, replyToMessageId: S.chat.replyTo ? S.chat.replyTo.messageId : null, threadId: S.chat.topic !== 'all' ? Number(S.chat.topic) : null };
     const result = await busy(btn, () => apiPost(`/api/telegram/groups/${form.dataset.group}/send`, body, { 'x-client-key': S.chat.draftKey }));
     if (result && result.status === 'failed') {
@@ -482,6 +482,7 @@ FORMS['chat-send'] = async (form) => {
     S.chat.draft = null;
     renderDraft();
     form.querySelector('[name="text"]').value = '';
+    autoSizeComposer();
     errBox.textContent = '';
     await refreshChatMessages();
     const bar = $('#cvReplyBar');
@@ -496,9 +497,9 @@ FORMS['chat-send'] = async (form) => {
 document.addEventListener('input', (e) => {
   const t = e.target;
   if (!t.dataset) return;
-  if (t.classList && t.classList.contains('cv-input') && S.chat.draft && t.value !== S.chat.draft.text) {
-    S.chat.draft = null;
-    renderDraft();
+  if (t.classList && t.classList.contains('cv-input')) {
+    draftTextChanged();
+    autoSizeComposer();
   }
   if (t.dataset.input === 'chat-search') {
     S.chat.listQuery = t.value;

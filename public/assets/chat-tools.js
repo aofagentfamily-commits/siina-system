@@ -181,28 +181,116 @@ document.addEventListener('input', (e) => {
   }
 });
 
-// Using a template: put it in the composer (never sends).
+// The template bar above the composer. The composer text is never sent automatically.
+const COMPOSER_MAX = 170;
+function autoSizeComposer() {
+  const ta = $('.cv-input');
+  if (!ta) return;
+  ta.style.height = 'auto';
+  const h = Math.min(ta.scrollHeight, COMPOSER_MAX);
+  ta.style.height = Math.max(h, 44) + 'px';
+  ta.style.overflowY = ta.scrollHeight > COMPOSER_MAX ? 'auto' : 'hidden';
+}
+function draftEdited() {
+  const input = $('.cv-input');
+  return !!(S.chat.draft && input && input.value !== S.chat.draft.text);
+}
+// Called from chat.js whenever the composer text changes.
+function draftTextChanged() {
+  if (!S.chat.draft) return;
+  if (draftEdited()) {
+    S.chat.draft.mode = 'plain';
+    S.chat.draft.edited = true;
+  }
+  renderDraft();
+}
+
 function applyTemplateToComposer(tpl, mode) {
   const input = $('.cv-input');
   const current = input ? input.value : '';
   let text = tpl.content;
   if (mode === 'append' && current.trim()) text = current.replace(/\s+$/, '') + '\n' + tpl.content;
   if (input) { input.value = text; input.focus(); }
-  S.chat.draft = mode === 'replace' && tpl.formatted ? { text, html: tpl.formatted } : null;
+  S.chat.draft = mode === 'replace'
+    ? { name: tpl.title, text, html: tpl.formatted || null, mode: tpl.formatted ? 'formatted' : 'plain', edited: false, collapsed: false }
+    : null;
   renderDraft();
+  autoSizeComposer();
   if (mode === 'append' && tpl.formatted) toast('เพิ่มต่อท้ายแล้ว (รูปแบบของเทมเพลตไม่ถูกใช้เมื่อรวมกับข้อความเดิม)');
 }
+
 function renderDraft() {
   const box = $('#cvDraft');
   if (!box) return;
   const d = S.chat.draft;
-  box.innerHTML = d ? `<div class="cv-draft-preview">
-      <span class="cv-draft-tag">จัดรูปแบบแล้ว</span>
-      <div class="cv-draft-html">${d.html}</div>
-      <button type="button" class="btn sm ghost" data-action="chat-draft-clear">ใช้เป็นข้อความธรรมดา</button>
-    </div>` : '';
+  if (!d) { box.innerHTML = ''; autoSizeComposer(); return; }
+  const preview = d.mode === 'formatted' && d.html
+    ? `<span class="tpl-bar-preview">${d.html}</span>`
+    : `<span class="tpl-bar-preview">${esc(d.text.replace(/\s+/g, ' ').slice(0, 160))}</span>`;
+  box.innerHTML = `<div class="tpl-bar ${d.collapsed ? 'is-collapsed' : ''}" role="region" aria-label="เทมเพลตที่กำลังใช้">
+      <div class="tpl-bar-main">
+        <span class="tpl-bar-ico">${icon('file', 'sm')}</span>
+        <div class="tpl-bar-text">
+          <small>กำลังใช้เทมเพลต${d.edited ? ' · แก้ไขแล้ว (ส่งแบบธรรมดา)' : ''}</small>
+          <b class="ellipsis">${esc(d.name)}</b>
+          ${d.collapsed ? '' : preview}
+        </div>
+        <div class="tpl-bar-modes" role="group" aria-label="รูปแบบการส่ง">
+          <button type="button" class="tpl-mode" aria-pressed="${d.mode === 'formatted'}" data-action="chat-draft-mode" data-mode="formatted" ${d.html ? '' : 'disabled title="เทมเพลตนี้ไม่มีรูปแบบ"'}>${icon('check', 'sm')} คงรูปแบบ</button>
+          <button type="button" class="tpl-mode" aria-pressed="${d.mode === 'plain'}" data-action="chat-draft-mode" data-mode="plain">ส่งแบบธรรมดา</button>
+        </div>
+        <button type="button" class="btn icon ghost tpl-collapse" data-action="chat-draft-collapse" aria-expanded="${!d.collapsed}" aria-label="${d.collapsed ? 'ขยายรายละเอียด' : 'ย่อรายละเอียด'}">${icon(d.collapsed ? 'chevDown' : 'chevLeft', 'sm')}</button>
+      </div>
+      <div class="tpl-bar-tools">
+        <button type="button" class="btn sm" data-action="chat-draft-edit">${icon('edit', 'sm')} แก้ไขก่อนส่ง</button>
+        <button type="button" class="btn sm ghost" data-action="chat-draft-clear">${icon('close', 'sm')} ล้างเทมเพลต</button>
+      </div>
+    </div>`;
+  autoSizeComposer();
 }
-ACTIONS['chat-draft-clear'] = () => { S.chat.draft = null; renderDraft(); };
+
+ACTIONS['chat-draft-mode'] = (el) => {
+  if (!S.chat.draft) return;
+  if (el.dataset.mode === 'formatted' && !S.chat.draft.html) return;
+  S.chat.draft.mode = el.dataset.mode;
+  renderDraft();
+};
+ACTIONS['chat-draft-collapse'] = () => {
+  if (!S.chat.draft) return;
+  S.chat.draft.collapsed = !S.chat.draft.collapsed;
+  renderDraft();
+};
+ACTIONS['chat-draft-edit'] = () => {
+  const input = $('.cv-input');
+  if (!input) return;
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  autoSizeComposer();
+};
+ACTIONS['chat-draft-clear'] = () => {
+  if (!S.chat.draft) return;
+  if (!draftEdited()) {
+    // Unchanged text: only the template bar goes away; the text stays in the composer as plain text.
+    S.chat.draft = null;
+    renderDraft();
+    return;
+  }
+  openModal({
+    title: 'ล้างเทมเพลต',
+    body: `<p>คุณแก้ไขข้อความจากเทมเพลตแล้ว ต้องการทำอย่างไร?</p>
+      <p class="muted small" style="margin-top:8px">การล้างจะไม่ลบเทมเพลตที่บันทึกไว้ในระบบ</p>`,
+    footer: `<button class="btn ghost" data-action="close-modal">ยกเลิก</button>
+      <button class="btn danger" id="tplClearAll">ล้างเทมเพลตและข้อความ</button>`,
+  }).addEventListener('click', (e) => {
+    if (!e.target.closest('#tplClearAll')) return;
+    closeAllModals();
+    const input = $('.cv-input');
+    if (input) input.value = '';
+    S.chat.draft = null;
+    renderDraft();
+    autoSizeComposer();
+  });
+};
 
 ACTIONS['chat-tpl-use'] = (el) => {
   const tpl = S.tpl.list.find((t) => t.id === el.dataset.id);

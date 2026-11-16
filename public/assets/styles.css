@@ -925,3 +925,32 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .tpl-actions { justify-content: flex-end; }
   .ft-thumb { width: 100%; height: auto; max-height: 200px; }
 }
+
+/* template bar above the composer and a composer that grows only with its text */
+.cv-draft { margin: 0 0 8px; }
+.cv-draft:empty { display: none; }
+.tpl-bar { border-radius: 16px; background: #493049; border: 1.5px solid #FF3290; box-shadow: 0 0 0 1px rgba(255, 51, 144, .2); color: #FFFFFF; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.tpl-bar-main { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tpl-bar-ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: #FF3290; color: #FFFFFF; flex: none; }
+.tpl-bar-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.tpl-bar-text small { color: #E8DCEB; font-size: .76rem; }
+.tpl-bar-text b { font-size: .95rem; }
+.tpl-bar-preview { color: #E8DCEB; font-size: .86rem; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.tpl-bar-preview b { color: #FFFFFF; }
+.tpl-bar.is-collapsed .tpl-bar-main { padding: 0; }
+.tpl-bar-modes { display: inline-flex; gap: 4px; padding: 3px; border-radius: 999px; background: rgba(0, 0, 0, .22); flex: none; }
+.tpl-mode { min-height: 30px; padding: 0 10px; border-radius: 999px; border: 0; background: transparent; color: #E8DCEB; font: inherit; font-size: .8rem; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.tpl-mode[aria-pressed="true"] { background: #FF3290; color: #FFFFFF; font-weight: 600; }
+.tpl-mode:disabled { opacity: .45; cursor: not-allowed; }
+.tpl-collapse { width: 32px; height: 32px; color: #FFFFFF; flex: none; }
+.tpl-bar-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+.tpl-bar-tools .btn { min-height: 34px; }
+.tpl-bar-tools .btn.ghost { color: #FFFFFF; border-color: rgba(255, 255, 255, .35); }
+.cv-input { min-height: 44px; max-height: 170px; line-height: 1.5; background: #F5D5E7; color: #281B2D; border: 1.5px solid #FF3290; resize: none; overflow-y: hidden; }
+.cv-input::placeholder { color: #7C5A7F; }
+@media (max-width: 640px) {
+  .tpl-bar-preview { -webkit-line-clamp: 1; }
+  .tpl-bar-modes { width: 100%; justify-content: stretch; }
+  .tpl-mode { flex: 1; justify-content: center; }
+  .tpl-bar-main { flex-wrap: wrap; }
+}
