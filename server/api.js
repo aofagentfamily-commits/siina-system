@@ -115,6 +115,25 @@ add('GET', '/api/export', (c) => {
 });
 add('GET', '/api/logs', (c) => ({ items: f.activityLogs(c.user) }));
 
+// Live stream (Server-Sent Events) for Telegram updates. Uses the same session cookie as the API.
+function openStream(req, res, user) {
+  res.writeHead(200, {
+    'content-type': 'text/event-stream; charset=utf-8',
+    'cache-control': 'no-cache, no-transform',
+    connection: 'keep-alive',
+    'x-accel-buffering': 'no',
+  });
+  res.write('event: ready\ndata: {}\n\n');
+  const unsubscribe = tg.subscribe(user.id, (payload) => {
+    res.write(`event: update\ndata: ${JSON.stringify(payload)}\n\n`);
+  });
+  const heartbeat = setInterval(() => res.write(': ping\n\n'), 25000);
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
+}
+
 function compile(method, pathname) {
   for (const r of ROUTES) {
     if (r.method !== method) continue;
@@ -165,6 +184,11 @@ function sendJson(res, status, payload, extraHeaders = {}) {
 }
 
 async function handleApi(req, res, url) {
+  if (req.method === 'GET' && url.pathname === '/api/telegram/stream') {
+    const user = auth.userFromToken(auth.readCookie(req, auth.COOKIE_NAME));
+    if (!user) throw new HttpError(401, 'กรุณาเข้าสู่ระบบ', 'UNAUTHORIZED');
+    return openStream(req, res, user);
+  }
   const compiled = compile(req.method, url.pathname);
   if (!compiled) {
     const exists = ROUTES.some((r) => r.re.test(url.pathname));

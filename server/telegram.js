@@ -7,6 +7,19 @@ const path = require('path');
 const { db, DATA_DIR } = require('./db');
 const u = require('./util');
 const features = require('./features');
+const { EventEmitter } = require('events');
+
+// Live updates: every change to a user's Telegram data is published here; api.js streams it to the browser.
+const bus = new EventEmitter();
+bus.setMaxListeners(0);
+function publish(userId, payload) {
+  bus.emit('update', userId, payload);
+}
+function subscribe(userId, fn) {
+  const handler = (uid, payload) => { if (uid === userId) fn(payload); };
+  bus.on('update', handler);
+  return () => bus.off('update', handler);
+}
 
 const API_BASE = 'https://api.telegram.org';
 const TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{20,}$/;
@@ -443,6 +456,7 @@ function ingestMessage(bot, msg) {
       reply ? String(reply.text || reply.caption || '').slice(0, 300) : null,
       JSON.stringify(matched), isOutgoing,
       new Date(msg.date * 1000).toISOString(), u.nowIso(), threadId);
+    publish(user.id, { groupId: g.id, messageId: msg.message_id, kind: 'message' });
     if (!matched.length) continue;
     db.prepare(`INSERT OR IGNORE INTO notifications (id, user_id, source_type, source_id, title, body, remind_at, created_at)
       VALUES (?,?,?,?,?,?,?,?)`).run(u.uid(), user.id, 'telegram', id,
@@ -622,6 +636,7 @@ async function deliver(user, outboxId, eventName = 'ส่งข้อควา�
       is_outgoing, sent_at, received_at, read_at, thread_id) VALUES (?,?,?,?,?,?,?,1,?,?,?,?)`).run(
       u.uid(), user.id, g.id, sent.message_id, bot.name, o.text, o.reply_to_message_id, u.nowIso(), u.nowIso(), u.nowIso(), o.thread_id);
     tlog(user.id, eventName, { bot: bot.name, group: g.title, detail: o.text.slice(0, 80) });
+    publish(user.id, { groupId: g.id, kind: 'sent' });
   } catch (err) {
     const message = err.message || 'ส่งข้อความไม่สำเร็จ';
     db.prepare("UPDATE telegram_outbox SET status='failed', error=?, updated_at=? WHERE id=?").run(message, u.nowIso(), o.id);
@@ -777,7 +792,7 @@ module.exports = {
   processUpdate, pollAll, chatList, groupMessages, mentionList, markGroupRead, mediaFile,
   sendMessage, retryOutbox, outboxForGroup,
   listFilters, createFilter, updateFilter, deleteFilter, groupTopics, renameTopic,
-  overview, autoReplyCheck, listLogs,
+  overview, autoReplyCheck, listLogs, subscribe,
   getWebhookBot: (id) => db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(id),
   publicBaseUrl,
 };

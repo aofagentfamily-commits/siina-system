@@ -50,13 +50,62 @@ async function boot() {
   if (!location.hash) history.replaceState(null, '', '#/home');
   route();
   refreshBell();
-  if (!S.bellTimer) S.bellTimer = setInterval(refreshBell, 30000);
+  refreshChatBadge();
+  startRealtime();
+  if (!S.bellTimer) S.bellTimer = setInterval(() => { refreshBell(); refreshChatBadge(); }, 30000);
+}
+
+/* ---------------------------------------------------------------- live updates (Server-Sent Events) */
+function startRealtime() {
+  if (S.es || !window.EventSource) return;
+  S.es = new EventSource('/api/telegram/stream');
+  S.es.addEventListener('update', (e) => {
+    let payload = {};
+    try { payload = JSON.parse(e.data); } catch (_) { /* ignore malformed */ }
+    onTelegramUpdate(payload).catch(() => null);
+  });
+}
+function stopRealtime() {
+  if (S.es) { S.es.close(); S.es = null; }
+}
+
+// Sidebar badge: total unread Telegram messages.
+async function refreshChatBadge() {
+  if (!S.user) return;
+  try {
+    const { items } = await apiGet('/api/telegram/chats');
+    const total = items.reduce((n, c) => n + c.unread, 0);
+    const badge = $('#chatNavCount');
+    if (badge) {
+      badge.textContent = total > 99 ? '99+' : String(total);
+      badge.hidden = total === 0;
+    }
+    if (S.route === 'chat' && S.chat) S.chat.chats = items;
+  } catch (_) { /* keep last value */ }
+}
+
+async function onTelegramUpdate(payload) {
+  refreshBell();
+  refreshChatBadge();
+  if (S.route !== 'chat' || !S.chat) return;
+  const sameGroup = payload.groupId && payload.groupId === S.chat.groupId;
+  if (sameGroup && !S.chat.anchored) {
+    if (payload.kind === 'message') await apiPost(`/api/telegram/groups/${S.chat.groupId}/read`).catch(() => null);
+    await refreshChatMessages();
+  }
+  const items = $('#cvItems');
+  if (items && S.chat.tab === 'mention') {
+    const { items: mentions } = await apiGet('/api/telegram/mentions');
+    S.chat.mentions = mentions;
+  }
+  if (items) items.innerHTML = chatListHtml();
 }
 
 /* ---------------------------------------------------------------- login (email + password) */
 S.login = { email: '', mode: 'login' };
 
 function renderLogin() {
+  stopRealtime();
   if (S.bellTimer) { clearInterval(S.bellTimer); S.bellTimer = null; }
   // The mockup scene is the background; the live form sits on top of the card area drawn in it.
   document.body.innerHTML = `
@@ -247,6 +296,7 @@ ACTIONS['close-drawer'] = () => closeDrawer();
 ACTIONS['close-modal'] = () => closeModal();
 ACTIONS['logout'] = async () => {
   await apiPost('/api/auth/logout').catch(() => null);
+  stopRealtime();
   S.user = null;
   location.hash = '';
   renderLogin();
