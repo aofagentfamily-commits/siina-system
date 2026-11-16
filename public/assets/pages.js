@@ -184,45 +184,91 @@ function projectCard(p) {
   </article>`;
 }
 
+// ---------------------------------------------------------------- project form (add / edit)
+function pjCurrentImage() {
+  return S.pendingImage !== undefined ? S.pendingImage : S.pjCurrentImage;
+}
+function pjRefreshPreview() {
+  const box = $('#pjPreview');
+  const form = document.querySelector('form[data-form="project"]');
+  if (!box || !form) return;
+  const img = pjCurrentImage();
+  const iconKey = form.querySelector('[name="icon"]').value;
+  box.innerHTML = img
+    ? `<img src="${esc(img)}" alt="ไอคอนโปรเจ็กต์ที่อัปโหลด">`
+    : `<span class="pj-preview-icon">${icon(PROJECT_ICON_KEYS.includes(iconKey) ? iconKey : 'folder', 'lg')}</span>`;
+}
+
 async function openProjectForm(id) {
   const p = id ? await apiGet('/api/projects/' + id) : {
-    name: '', category: '', description: '', icon: 'folder', status: 'in_progress', openUrl: '', editorUrl: '',
-    startDate: '', notes: '', isFavorite: false, imageData: null,
+    name: '', category: '', description: '', icon: 'folder', status: 'in_progress',
+    openUrl: '', editorUrl: '', isFavorite: false, imageData: null,
   };
-  S.pendingImage = undefined; // undefined = unchanged, null = removed, string = new
+  S.pendingImage = undefined; // undefined = unchanged, null = removed, string = new picture
+  S.pjCurrentImage = p.imageData || null;
   const overlay = openModal({
-    title: id ? 'แก้ไขข้อมูลโปรเจ็กต์' : 'เพิ่มโปรเจ็กต์',
+    title: id ? 'แก้ไขโปรเจ็กต์' : 'เพิ่มโปรเจ็กต์',
     wide: true,
-    body: `<form data-form="project" data-id="${esc(id || '')}" class="form-grid" novalidate>
-      <label class="field"><span>ชื่อโปรเจ็กต์ *</span><input class="input" name="name" required maxlength="120" value="${esc(p.name)}"></label>
-      <label class="field"><span>หมวดหมู่</span><input class="input" name="category" maxlength="60" list="cat-list" value="${esc(p.category)}"></label>
-      <datalist id="cat-list"><option value="ระบบภายใน"></option><option value="แดชบอร์ด / รายงาน"></option><option value="ประกาศ / สื่อสารภายใน"></option><option value="งานธุรการ / พัสดุ"></option></datalist>
-      <label class="field full"><span>คำอธิบาย</span><textarea class="textarea" name="description" maxlength="500" rows="2">${esc(p.description)}</textarea></label>
-      <div class="field full"><span>ไอคอน</span>
+    body: `<form data-form="project" data-id="${esc(id || '')}" class="pj-form" novalidate>
+      <section class="pj-section">
+        <h4>ไอคอนโปรเจ็กต์</h4>
+        <div class="pj-icon-row">
+          <div class="pj-preview" id="pjPreview"></div>
+          <div class="pj-icon-choices">
+            <div class="icon-pick" role="group" aria-label="ไอคอนสำเร็จรูป">
+              ${PROJECT_ICON_KEYS.map((k) => `<button type="button" aria-label="${k}" aria-pressed="${p.icon === k}" data-action="pick-icon" data-value="${k}">${icon(k)}</button>`).join('')}
+            </div>
+            <div class="pj-upload-row">
+              <button type="button" class="btn sm primary" data-action="pj-upload">${icon('upload', 'sm')} อัปโหลดไอคอน</button>
+              <button type="button" class="btn sm ghost" data-action="project-image-clear">${icon('trash2', 'sm')} ลบรูป</button>
+            </div>
+            <small class="muted">รองรับ PNG, JPG, WebP ไม่เกิน 300 KB ระบบครอบเป็นสี่เหลี่ยมจัตุรัสให้ได้ รูปที่อัปโหลดจะแทนไอคอนสำเร็จรูป</small>
+          </div>
+        </div>
         <input type="hidden" name="icon" value="${esc(p.icon)}">
-        <div class="icon-pick" role="group" aria-label="เลือกไอคอน">
-          ${PROJECT_ICON_KEYS.map((k) => `<button type="button" aria-label="${k}" aria-pressed="${p.icon === k}" data-action="pick-icon" data-value="${k}">${icon(k)}</button>`).join('')}
+      </section>
+      <section class="pj-section">
+        <div class="form-grid">
+          <label class="field full"><span>ชื่อโปรเจ็กต์ *</span><input class="input" name="name" required maxlength="120" value="${esc(p.name)}"></label>
+          <label class="field"><span>หมวดหมู่</span><input class="input" name="category" maxlength="60" list="cat-list" value="${esc(p.category)}"></label>
+          <datalist id="cat-list"><option value="ภายในองค์กร AOF"></option><option value="ระบบภายใน"></option><option value="แดชบอร์ด / รายงาน"></option><option value="ประกาศ / สื่อสารภายใน"></option><option value="งานธุรการ / พัสดุ"></option></datalist>
+          <label class="field"><span>สถานะโปรเจ็กต์</span><select class="select" name="status">
+            ${Object.entries(PROJECT_STATUS).map(([k, v]) => `<option value="${k}" ${p.status === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}
+          </select></label>
+          <label class="field full"><span>คำอธิบาย</span><textarea class="textarea" name="description" maxlength="500" rows="2">${esc(p.description)}</textarea></label>
+          <label class="field full"><span>URL สำหรับเปิดโปรเจ็กต์</span><input class="input" name="openUrl" type="url" placeholder="https://..." value="${esc(p.openUrl || '')}"></label>
+          <label class="field full"><span>URL สำหรับแก้ไขโค้ด</span><input class="input" name="editorUrl" type="url" placeholder="https://..." value="${esc(p.editorUrl || '')}"></label>
         </div>
-        <div class="row wrap" style="margin-top:8px">
-          <input class="input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" data-change="project-image" style="max-width:300px">
-          <button type="button" class="btn sm ghost" data-action="project-image-clear">ลบรูปภาพ</button>
-        </div>
-        <span class="hint muted small">หรืออัปโหลดรูปภาพ (ไม่เกิน 300 KB) เพื่อแทนไอคอน</span>
-      </div>
-      <label class="field"><span>URL สำหรับเปิดโปรเจ็กต์</span><input class="input" name="openUrl" type="url" placeholder="https://..." value="${esc(p.openUrl || '')}"></label>
-      <label class="field"><span>URL สำหรับแก้ไขโค้ด</span><input class="input" name="editorUrl" type="url" placeholder="https://..." value="${esc(p.editorUrl || '')}"></label>
-      <label class="field"><span>สถานะโปรเจ็กต์</span><select class="select" name="status">
-        ${Object.entries(PROJECT_STATUS).map(([k, v]) => `<option value="${k}" ${p.status === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}
-      </select></label>
-      <label class="field"><span>วันที่เริ่มต้น (ไม่บังคับ)</span><input class="input" name="startDate" type="date" value="${esc(p.startDate || '')}"></label>
-      <label class="field full"><span>หมายเหตุเพิ่มเติม</span><textarea class="textarea" name="notes" maxlength="2000" rows="2">${esc(p.notes)}</textarea></label>
-      <label class="check full"><input type="checkbox" name="isFavorite" ${p.isFavorite ? 'checked' : ''}> เพิ่มเป็นรายการโปรด</label>
-      <div class="full small muted" data-role="form-error" role="alert"></div>
-      <div class="full" style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap">
+      </section>
+      <input type="hidden" name="isFavorite" value="${p.isFavorite ? 1 : 0}">
+      <div class="full small" data-role="form-error" role="alert"></div>
+      <div class="pj-actions">
         <button type="button" class="btn ghost" data-action="close-modal">ยกเลิก</button>
-        <button type="submit" class="btn primary">บันทึก</button>
+        <button type="submit" class="btn primary">${icon('save', 'sm')} บันทึกการเปลี่ยนแปลง</button>
       </div>
     </form>`,
+    onMount: (modal) => {
+      // Favorite star sits in the header, left of the close button. It is saved only with the form.
+      const header = modal.querySelector('header');
+      const close = header.querySelector('[data-action="close-modal"]');
+      const star = document.createElement('button');
+      const form = modal.querySelector('form[data-form="project"]');
+      const fav = form.querySelector('[name="isFavorite"]');
+      star.type = 'button';
+      star.className = 'pj-star' + (fav.value === '1' ? ' on' : '');
+      star.setAttribute('aria-pressed', fav.value === '1' ? 'true' : 'false');
+      star.setAttribute('aria-label', 'รายการโปรด');
+      star.title = 'รายการโปรด';
+      star.innerHTML = icon('star');
+      star.addEventListener('click', () => {
+        const on = fav.value !== '1';
+        fav.value = on ? '1' : '0';
+        star.classList.toggle('on', on);
+        star.setAttribute('aria-pressed', String(on));
+      });
+      header.insertBefore(star, close);
+      pjRefreshPreview();
+    },
   });
   return overlay;
 }
@@ -230,6 +276,7 @@ async function openProjectForm(id) {
 FORMS.project = async (form) => {
   const fd = new FormData(form);
   const id = form.dataset.id;
+  // startDate and notes are no longer shown; they are not sent, so the stored values stay as they are.
   const body = {
     name: fd.get('name'),
     category: fd.get('category'),
@@ -238,16 +285,14 @@ FORMS.project = async (form) => {
     status: fd.get('status'),
     openUrl: fd.get('openUrl'),
     editorUrl: fd.get('editorUrl'),
-    startDate: fd.get('startDate') || null,
-    notes: fd.get('notes'),
-    isFavorite: fd.get('isFavorite') === 'on',
+    isFavorite: fd.get('isFavorite') === '1',
   };
   if (S.pendingImage !== undefined) body.imageData = S.pendingImage;
   const btn = form.querySelector('[type="submit"]');
   try {
     await busy(btn, () => (id ? apiPatch('/api/projects/' + id, body) : apiPost('/api/projects', body)));
     projectNameCache = null;
-    closeModal();
+    closeAllModals();
     toast(id ? 'บันทึกการแก้ไขโปรเจ็กต์แล้ว' : 'เพิ่มโปรเจ็กต์แล้ว');
     rerender();
   } catch (err) {
@@ -268,11 +313,24 @@ CHANGES['project-image'] = (el) => {
   reader.onload = () => { S.pendingImage = reader.result; toast('เลือกรูปภาพแล้ว กดบันทึกเพื่อยืนยัน'); };
   reader.readAsDataURL(file);
 };
-ACTIONS['project-image-clear'] = () => { S.pendingImage = null; toast('จะลบรูปภาพเมื่อกดบันทึก'); };
+ACTIONS['project-image-clear'] = () => { S.pendingImage = null; pjRefreshPreview(); toast('จะลบรูปภาพเมื่อกดบันทึก'); };
 ACTIONS['pick-icon'] = (el) => {
   const form = el.closest('form');
   form.querySelector('[name="icon"]').value = el.dataset.value;
   $$('.icon-pick button', form).forEach((b) => b.setAttribute('aria-pressed', String(b === el)));
+  S.pendingImage = null; // a preset icon replaces an uploaded picture
+  pjRefreshPreview();
+};
+ACTIONS['pj-upload'] = () => {
+  openAvatarEditor({
+    title: 'ไอคอนโปรเจ็กต์',
+    current: pjCurrentImage(),
+    fallback: icon('folder', 'lg'),
+    onSave: async (data) => {
+      S.pendingImage = data; // null removes the picture
+      pjRefreshPreview();
+    },
+  });
 };
 
 ACTIONS['project-new'] = () => openProjectForm();
