@@ -773,3 +773,29 @@ button, input, select, textarea { font: inherit; color: inherit; }
   .cv-layout { min-height: 0; }
   .cv-messages { max-height: 62vh; }
 }
+
+/* ---------------------------------------------------------------- contrast boost: cards, inputs and list rows stand out from the background */
+.card {
+  background: linear-gradient(180deg, #34283F 0%, #2A2034 100%);
+  border: 1px solid rgba(255, 150, 200, .28);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .05);
+}
+.input, .select, .textarea {
+  background: #3E3150;
+  border: 1px solid rgba(255, 183, 213, .42);
+  color: #FFFFFF;
+}
+.input::placeholder, .textarea::placeholder { color: #B9A9C4; opacity: 1; }
+.input:focus, .select:focus, .textarea:focus { background: #46375A; border-color: #FF4F9A; }
+.item {
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255, 183, 213, .14);
+}
+.item:hover { background: rgba(255, 79, 154, .14); border-color: rgba(255, 79, 154, .45); }
+.tg-tag { background: rgba(255, 255, 255, .09); border-color: rgba(255, 183, 213, .4); color: #FFFFFF; }
+.tg-tag.on { background: rgba(255, 79, 154, .3); border-color: #FF4F9A; }
+.badge { background: rgba(255, 255, 255, .12); color: #F2E9F6; }
+.setting-row { border-bottom-color: rgba(255, 183, 213, .18); }
+.empty { background: rgba(255, 255, 255, .04); border-color: rgba(255, 183, 213, .3); color: #CFC2DA; }
+.tab, .btn { border-color: rgba(255, 183, 213, .4); }
+.btn:not(.primary):not(.danger):not(.ghost) { background: rgba(255, 255, 255, .1); }
