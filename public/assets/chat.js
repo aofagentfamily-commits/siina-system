@@ -134,6 +134,7 @@ async function renderChat(params) {
             <button class="btn icon ghost" data-action="chat-search-toggle" aria-label="ค้นหาในแชท" aria-expanded="false">${icon('search')}</button>
             <button class="btn icon ghost" data-action="chat-info" aria-label="รายละเอียดกลุ่ม">${icon('alert')}</button>
             <button class="btn icon ghost cv-clear" data-action="chat-clear" aria-label="ลบประวัติแชทในระบบ" title="ลบประวัติแชทในระบบ">${icon('trash2')}</button>
+            <button class="ct-open" data-action="chat-theme-open" aria-label="ปรับแต่งธีม">${icon('heart', 'sm')} ปรับแต่งธีม</button>
           </div>
         </header>
         <nav class="cv-headtabs" aria-label="ประเภทข้อความ">

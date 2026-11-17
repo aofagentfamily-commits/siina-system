@@ -334,6 +334,16 @@ CREATE TABLE IF NOT EXISTS telegram_button_presses (
 );
 CREATE INDEX IF NOT EXISTS idx_presses_group ON telegram_button_presses(group_id, telegram_message_id);
 
+-- Chat theme per account and room (display inside SIINA SYSTEM only)
+CREATE TABLE IF NOT EXISTS chat_themes (
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id TEXT NOT NULL REFERENCES telegram_groups(id) ON DELETE CASCADE,
+  theme TEXT NOT NULL,
+  options TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, group_id)
+);
+
 CREATE TABLE IF NOT EXISTS telegram_group_tags (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
