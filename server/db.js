@@ -349,4 +349,8 @@ if (!columnsOf('telegram_outbox').some((c) => c.name === 'html')) {
   db.exec('ALTER TABLE telegram_outbox ADD COLUMN html TEXT');
 }
 
+// Placeholder topics ("หัวข้อ #<id>") created from replies in ordinary groups are not real topics: remove them.
+db.exec("DELETE FROM telegram_topics WHERE name = 'หัวข้อ #' || thread_id");
+db.exec('UPDATE telegram_groups SET is_forum = 0 WHERE is_forum = 1 AND id NOT IN (SELECT group_id FROM telegram_topics)');
+
 module.exports = { db, DATA_DIR };

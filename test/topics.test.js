@@ -64,3 +64,14 @@ test.after(() => {
   db.close();
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('a reply with a thread id in an ordinary group does not create a topic', () => {
+  db.prepare(`INSERT INTO telegram_groups (id, user_id, bot_id, title, chat_id, enabled, status, created_at, updated_at)
+    VALUES ('g-plain', ?, 'b-topics', 'กลุ่มธรรมดา', '-100888', 1, 'ready', ?, ?)`).run(user.id, now, now);
+  const plain = db.prepare("SELECT * FROM telegram_groups WHERE id = 'g-plain'").get();
+  tg.processUpdate(bot, { update_id: 90, message: { message_id: 90, date: base, chat: { id: -100888 },
+    from: { id: 42, first_name: 'Mim' }, message_thread_id: 11261, text: 'ตอบกลับข้อความนี้' } });
+  assert.deepEqual(tg.groupTopics(user, 'g-plain'), []);
+  assert.equal(db.prepare("SELECT is_forum FROM telegram_groups WHERE id = 'g-plain'").get().is_forum, 0);
+  assert.ok(plain);
+});

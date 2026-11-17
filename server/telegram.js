@@ -473,9 +473,11 @@ function ingestMessage(bot, msg) {
     const exists = db.prepare('SELECT id FROM telegram_messages WHERE group_id = ? AND message_id = ?').get(g.id, msg.message_id);
     if (exists) continue; // duplicate delivery (webhook retry / polling overlap)
     const threadId = msg.message_thread_id || null;
+    // A thread id alone does not make a topic: only a real forum group (or a topic event) lists topics.
+    const isForum = !!(g.is_forum || (msg.chat && msg.chat.is_forum) || msg.forum_topic_created || msg.forum_topic_edited);
     if (msg.forum_topic_created) upsertTopic(user.id, g.id, threadId, msg.forum_topic_created.name, true);
     if (msg.forum_topic_edited && msg.forum_topic_edited.name) upsertTopic(user.id, g.id, threadId, msg.forum_topic_edited.name, true);
-    else if (threadId) upsertTopic(user.id, g.id, threadId, null, false);
+    else if (threadId && isForum) upsertTopic(user.id, g.id, threadId, null, false);
     const isTopicService = !!(msg.forum_topic_created || msg.forum_topic_edited || msg.forum_topic_closed || msg.forum_topic_reopened);
     if (isTopicService && !(msg.text || msg.caption)) continue; // topic created/renamed notices are not conversation
     const settings = features.getSettings(user.id);
