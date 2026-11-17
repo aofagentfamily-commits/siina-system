@@ -7,11 +7,12 @@ const NAV = [
   { k: 'projects', label: 'โปรเจ็กต์', i: 'folder' },
   { k: 'calendar', label: 'ปฏิทิน', i: 'calendar' },
   { k: 'summary', label: 'สรุปสำคัญ', i: 'bell' },
+  { k: 'vault', label: 'ข้อมูลการเข้าสู่ระบบ', i: 'lock' },
   { k: 'settings', label: 'ตั้งค่า', i: 'settings' },
 ];
 const PAGES = {
   shop: renderShop, home: renderHome, chat: renderChat, projects: renderProjects,
-  calendar: renderCalendar, summary: renderSummary, settings: renderSettings,
+  calendar: renderCalendar, summary: renderSummary, vault: renderVault, settings: renderSettings,
 };
 const LOGIN_TILES = [
   ['n8n', 'Workflow'], ['Claude', 'AI'], ['GPT', 'AI'],

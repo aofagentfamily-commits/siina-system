@@ -273,6 +273,31 @@ CREATE TABLE IF NOT EXISTS private_access (
   updated_at TEXT NOT NULL
 );
 
+-- Credentials vault: accounts, links and encrypted passwords (ข้อมูลการเข้าสู่ระบบ)
+CREATE TABLE IF NOT EXISTS vault_categories (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  color TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS vault_items (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  category_id TEXT REFERENCES vault_categories(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  login TEXT,
+  url TEXT,
+  note TEXT,
+  secret_enc TEXT,
+  starred INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_vault_items_user ON vault_items(user_id, title);
+
 CREATE TABLE IF NOT EXISTS telegram_group_tags (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
