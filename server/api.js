@@ -97,6 +97,8 @@ add('DELETE', '/api/telegram/stickers/:id', (c) => tpl.deleteSticker(c.user, c.p
 add('POST', '/api/telegram/groups/:id/send-file', (c) => tg.sendFile(c.user, c.params.id, c.body));
 add('POST', '/api/telegram/groups/:id/send-sticker', (c) => tg.sendSticker(c.user, c.params.id, c.body));
 add('POST', '/api/telegram/messages/:id/ack', (c) => tg.ackMessage(c.user, c.params.id, c.body.acked !== false && c.body.acked !== 'false'));
+add('POST', '/api/telegram/groups/:id/unlock', (c) => tg.unlockGroup(c.user, c.params.id, c.body.pin));
+add('POST', '/api/telegram/groups/:id/unlock-password', (c) => tg.unlockWithPassword(c.user, c.params.id, c.body.password));
 add('PUT', '/api/telegram/groups/:id/tags', (c) => tg.setGroupTags(c.user, c.params.id, c.body.tags));
 add('GET', '/api/telegram/overview', (c) => tg.overview(c.user));
 add('GET', '/api/telegram/logs', (c) => ({ items: tg.listLogs(c.user, c.query) }));

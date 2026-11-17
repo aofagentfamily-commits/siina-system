@@ -6,6 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { db, DATA_DIR } = require('./db');
 const u = require('./util');
+const auth = require('./auth');
 const features = require('./features');
 const { EventEmitter } = require('events');
 const templates = require('./templates');
@@ -215,7 +216,7 @@ function groupDto(g) {
     id: g.id, botId: g.bot_id || null, botName: g.bot_name || null, previousBotId: g.previous_bot_id || null,
     tags: g.tags || [],
     title: g.title, chatId: g.chat_id, enabled: !!g.enabled, autoReply: !!g.auto_reply,
-    avatarData: g.avatar_data || null, status: g.bot_id ? g.status : 'unlinked',
+    avatarData: g.avatar_data || null, status: g.bot_id ? g.status : 'unlinked', locked: !!g.lock_hash,
     lastError: g.last_error, lastTestedAt: g.last_tested_at, createdAt: g.created_at, updatedAt: g.updated_at,
   };
 }
@@ -266,6 +267,72 @@ function setGroupTags(user, groupId, list) {
   return { ok: true, tags: clean };
 }
 
+// ---------------------------------------------------------------- room lock (6-digit PIN per group)
+// A locked room needs its PIN once per 2 hours. Five wrong tries wait 5 minutes. Stored only in memory.
+const UNLOCK_TTL_MS = 2 * 60 * 60 * 1000;
+const TRIES_MAX = 5;
+const TRIES_WAIT_MS = 5 * 60 * 1000;
+const unlockedUntil = new Map(); // `${userId}:${groupId}` -> time the room stays open
+const failedTries = new Map();   // same key -> { count, waitUntil }
+const lockKey = (userId, groupId) => `${userId}:${groupId}`;
+
+function isUnlocked(userId, groupId) {
+  const t = unlockedUntil.get(lockKey(userId, groupId));
+  return !!t && t > Date.now();
+}
+function lockedGroupIds(userId) {
+  return new Set(db.prepare('SELECT id FROM telegram_groups WHERE user_id = ? AND lock_hash IS NOT NULL').all(userId)
+    .map((r) => r.id).filter((id) => !isUnlocked(userId, id)));
+}
+function checkTries(key) {
+  const t = failedTries.get(key);
+  if (t && t.waitUntil > Date.now()) throw new u.HttpError(429, 'ใส่รหัสผิดหลายครั้ง กรุณารอ 5 นาทีแล้วลองใหม่', 'RATE_LIMIT');
+}
+function failTry(key, message, code) {
+  const t = failedTries.get(key) || { count: 0, waitUntil: 0 };
+  t.count += 1;
+  if (t.count >= TRIES_MAX) {
+    failedTries.set(key, { count: 0, waitUntil: Date.now() + TRIES_WAIT_MS });
+    throw new u.HttpError(429, 'ใส่รหัสผิดหลายครั้ง กรุณารอ 5 นาทีแล้วลองใหม่', 'RATE_LIMIT');
+  }
+  failedTries.set(key, t);
+  throw new u.HttpError(403, `${message} (เหลือ ${TRIES_MAX - t.count} ครั้ง)`, code);
+}
+function grantUnlock(userId, groupId) {
+  unlockedUntil.set(lockKey(userId, groupId), Date.now() + UNLOCK_TTL_MS);
+  failedTries.delete(lockKey(userId, groupId));
+}
+// A locked room refuses reading and sending until it is unlocked. Returns the group for chaining.
+function assertUnlocked(user, g) {
+  if (g.lock_hash && !isUnlocked(user.id, g.id)) throw new u.HttpError(423, 'ห้องแชทนี้ถูกล็อก กรุณาใส่รหัสก่อน', 'LOCKED');
+  return g;
+}
+function hashPin(pin) {
+  const value = String(pin == null ? '' : pin).trim();
+  if (!/^\d{6}$/.test(value)) throw new u.HttpError(400, 'รหัสล็อกต้องเป็นตัวเลข 6 หลัก', 'VALIDATION');
+  return auth.hashPassword(value);
+}
+function unlockGroup(user, id, pin) {
+  const g = getGroup(user, id);
+  if (!g.lock_hash) return { ok: true };
+  const key = lockKey(user.id, g.id);
+  checkTries(key);
+  if (!auth.verifyPassword(String(pin || ''), g.lock_hash)) failTry(key, 'รหัสไม่ถูกต้อง', 'BAD_PIN');
+  grantUnlock(user.id, g.id);
+  return { ok: true };
+}
+// "ลืมรหัส?": the account password opens the room for this session. The room PIN itself is not changed.
+function unlockWithPassword(user, id, password) {
+  const g = getGroup(user, id);
+  const key = lockKey(user.id, g.id);
+  checkTries(key);
+  const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id);
+  if (!auth.verifyPassword(String(password || ''), row && row.password_hash)) failTry(key, 'รหัสผ่านบัญชีไม่ถูกต้อง', 'BAD_PASSWORD');
+  grantUnlock(user.id, g.id);
+  u.activity(user.id, 'unlock', 'telegram_group', g.id, '');
+  return { ok: true };
+}
+
 function getGroup(user, id) {
   const g = db.prepare('SELECT * FROM telegram_groups WHERE id = ? AND user_id = ?').get(id, user.id);
   if (!g) throw new u.HttpError(404, 'ไม่พบกลุ่ม', 'NOT_FOUND');
@@ -297,6 +364,11 @@ function updateGroup(user, id, body) {
   const enabled = body.enabled != null ? (u.bool(body.enabled) ? 1 : 0) : g.enabled;
   const autoReply = body.autoReply != null ? (u.bool(body.autoReply) ? 1 : 0) : g.auto_reply;
   const avatar = 'avatarData' in body ? avatarOrThrow(body.avatarData, 'รูปกลุ่ม') : g.avatar_data;
+  // lockOff removes the PIN; a 6-digit lockPin sets or changes it; otherwise the current PIN stays.
+  let lockHash = g.lock_hash;
+  if (body.lockOff === true) lockHash = null;
+  else if (body.lockPin != null && String(body.lockPin).trim() !== '') lockHash = hashPin(body.lockPin);
+  if (lockHash !== g.lock_hash) unlockedUntil.delete(lockKey(user.id, g.id));
   let botId = g.bot_id;
   let status = g.status;
   let lastError = g.last_error;
@@ -322,8 +394,8 @@ function updateGroup(user, id, body) {
       if (g.bot_id) botChangedFrom = db.prepare('SELECT name FROM telegram_bots WHERE id = ?').get(g.bot_id)?.name || 'บอทเดิม';
     }
   }
-  db.prepare(`UPDATE telegram_groups SET title=?, enabled=?, auto_reply=?, avatar_data=?, bot_id=?, previous_bot_id=?, status=?, last_error=?, updated_at=?
-    WHERE id=? AND user_id=?`).run(title, enabled, autoReply, avatar, botId, previous, status, lastError, u.nowIso(), id, user.id);
+  db.prepare(`UPDATE telegram_groups SET title=?, enabled=?, auto_reply=?, avatar_data=?, bot_id=?, previous_bot_id=?, status=?, last_error=?, lock_hash=?, updated_at=?
+    WHERE id=? AND user_id=?`).run(title, enabled, autoReply, avatar, botId, previous, status, lastError, lockHash, u.nowIso(), id, user.id);
   const updated = db.prepare('SELECT g.*, b.name AS bot_name FROM telegram_groups g LEFT JOIN telegram_bots b ON b.id = g.bot_id WHERE g.id = ?').get(id);
   if (botChangedTo !== null || botChangedFrom !== null || (botId === null && g.bot_id)) {
     tlog(user.id, 'เปลี่ยนบอท', { group: title, bot: botChangedTo, detail: `${botChangedFrom || 'ไม่มีบอท'} → ${botChangedTo || 'ไม่มีบอท'}` });
@@ -462,7 +534,7 @@ function renameTopic(user, groupId, threadId, name) {
 const TOPIC_COLORS = ['#B8CEFF', '#B5E6FF', '#C5EBD3', '#DEC8FF', '#FFD5B5', '#FFF0AD', '#FFC5DE', '#FFFFFF'];
 
 function groupTopics(user, groupId) {
-  getGroup(user, groupId);
+  assertUnlocked(user, getGroup(user, groupId));
   return db.prepare('SELECT thread_id, name, color FROM telegram_topics WHERE group_id = ? AND user_id = ? ORDER BY thread_id')
     .all(groupId, user.id).map((t) => ({ threadId: t.thread_id, name: t.name, color: t.color || null }));
 }
@@ -603,7 +675,7 @@ function scheduleAutoReply(userId, groupId, messageId, text) {
 // ---------------------------------------------------------------- chat list, messages, media
 function chatList(user) {
   return db.prepare(`
-    SELECT g.id, g.title, g.enabled, g.status, g.bot_id, g.avatar_data,
+    SELECT g.id, g.title, g.enabled, g.status, g.bot_id, g.avatar_data, (g.lock_hash IS NOT NULL) AS is_locked,
       (SELECT text FROM telegram_messages m WHERE m.group_id = g.id ORDER BY sent_at DESC LIMIT 1) AS last_text,
       (SELECT sent_at FROM telegram_messages m WHERE m.group_id = g.id ORDER BY sent_at DESC LIMIT 1) AS last_at,
       (SELECT COUNT(*) FROM telegram_messages m WHERE m.group_id = g.id AND m.read_at IS NULL AND m.is_outgoing = 0) AS unread,
@@ -611,7 +683,8 @@ function chatList(user) {
     FROM telegram_groups g WHERE g.user_id = ? ORDER BY last_at DESC NULLS LAST, g.title`).all(user.id).map((r) => ({
     id: r.id, title: r.title, enabled: !!r.enabled, status: r.bot_id ? r.status : 'unlinked',
     avatarData: r.avatar_data || null,
-    lastText: r.last_text ? r.last_text.slice(0, 120) : '', lastAt: r.last_at,
+    locked: !!r.is_locked, unlocked: !r.is_locked || isUnlocked(user.id, r.id),
+    lastText: r.is_locked && !isUnlocked(user.id, r.id) ? '' : (r.last_text ? r.last_text.slice(0, 120) : ''), lastAt: r.last_at,
     unread: r.unread, mentions: r.mentions,
   }));
 }
@@ -636,7 +709,7 @@ function withSenderBot(groupId, userId) {
 
 // Latest messages, older pages (before=), or a window around one message (around=) for "jump to message".
 function groupMessages(user, groupId, q) {
-  getGroup(user, groupId);
+  assertUnlocked(user, getGroup(user, groupId));
   const limit = u.int(q.limit || 60, { min: 1, max: 200, field: 'จำนวนข้อความ' });
   if (q.around) {
     const target = u.int(q.around, { min: 1, field: 'ข้อความเป้าหมาย' });
@@ -674,14 +747,15 @@ function mentionList(user) {
   return db.prepare(`SELECT m.id, m.message_id, m.group_id, m.sender_name, m.text, m.sent_at, m.read_at, m.acked_at, g.title AS group_title
     FROM telegram_messages m JOIN telegram_groups g ON g.id = m.group_id
     WHERE m.user_id = ? AND m.is_outgoing = 0 AND m.matched LIKE '%"mention"%'
-    ORDER BY m.sent_at DESC LIMIT 200`).all(user.id).map((r) => ({
+      AND m.group_id NOT IN (SELECT value FROM json_each(?))
+    ORDER BY m.sent_at DESC LIMIT 200`).all(user.id, JSON.stringify([...lockedGroupIds(user.id)])).map((r) => ({
     id: r.id, messageId: r.message_id, groupId: r.group_id, groupTitle: r.group_title,
     senderName: r.sender_name, text: r.text, sentAt: r.sent_at, read: !!r.read_at, ackedAt: r.acked_at || null,
   }));
 }
 
 function markGroupRead(user, groupId) {
-  getGroup(user, groupId);
+  assertUnlocked(user, getGroup(user, groupId));
   db.prepare('UPDATE telegram_messages SET read_at = ? WHERE group_id = ? AND user_id = ? AND read_at IS NULL').run(u.nowIso(), groupId, user.id);
   return { ok: true };
 }
@@ -752,7 +826,7 @@ async function deliver(user, outboxId, eventName = 'ส่งข้อควา�
 }
 
 async function sendMessage(user, groupId, body, clientKey) {
-  const g = getGroup(user, groupId);
+  const g = assertUnlocked(user, getGroup(user, groupId));
   if (!g.enabled) throw new u.HttpError(400, 'กลุ่มนี้ปิดการติดตามอยู่ เปิดก่อนจึงจะส่งได้', 'DISABLED');
   if (!g.bot_id) throw new u.HttpError(400, 'กลุ่มนี้ยังไม่ได้เชื่อมต่อบอท เลือกบอทก่อนส่งข้อความ', 'UNLINKED');
   const text = u.str(body.text, { max: 4000, required: true, field: 'ข้อความ' });
@@ -783,6 +857,7 @@ async function retryOutbox(user, id) {
 }
 
 function outboxForGroup(user, groupId) {
+  assertUnlocked(user, getGroup(user, groupId));
   return db.prepare("SELECT * FROM telegram_outbox WHERE user_id = ? AND group_id = ? AND status != 'sent' AND client_key NOT LIKE 'auto:%' ORDER BY created_at DESC LIMIT 20")
     .all(user.id, groupId).map(outboxDto);
 }
@@ -802,7 +877,7 @@ function sentFile(user, g, bot, sent, kind, name, mime, size, caption, threadId)
 }
 
 async function sendFile(user, groupId, body) {
-  const g = getGroup(user, groupId);
+  const g = assertUnlocked(user, getGroup(user, groupId));
   if (!g.enabled) throw new u.HttpError(400, 'กลุ่มนี้ปิดการติดตามอยู่', 'DISABLED');
   if (!g.bot_id) throw new u.HttpError(400, 'กลุ่มนี้ยังไม่ได้เชื่อมต่อบอท', 'UNLINKED');
   const bot = getBot(user, g.bot_id);
@@ -841,7 +916,7 @@ async function sendFile(user, groupId, body) {
 }
 
 async function sendSticker(user, groupId, body) {
-  const g = getGroup(user, groupId);
+  const g = assertUnlocked(user, getGroup(user, groupId));
   if (!g.enabled) throw new u.HttpError(400, 'กลุ่มนี้ปิดการติดตามอยู่', 'DISABLED');
   if (!g.bot_id) throw new u.HttpError(400, 'กลุ่มนี้ยังไม่ได้เชื่อมต่อบอท', 'UNLINKED');
   const sticker = templates.getSticker(user, u.str(body.stickerId, { max: 64, required: true, field: 'สติกเกอร์' }));
@@ -976,7 +1051,7 @@ module.exports = {
   listGroups, createGroup, updateGroup, deleteGroup, testGroup,
   processUpdate, pollAll, chatList, groupMessages, mentionList, markGroupRead, mediaFile,
   sendMessage, retryOutbox, outboxForGroup,
-  listFilters, createFilter, updateFilter, deleteFilter, groupTopics, renameTopic, setTopicColor, createTopic, ackMessage, setGroupTags,
+  listFilters, createFilter, updateFilter, deleteFilter, groupTopics, renameTopic, setTopicColor, createTopic, ackMessage, setGroupTags, unlockGroup, unlockWithPassword,
   overview, autoReplyCheck, listLogs, subscribe, sendFile, sendSticker,
   getWebhookBot: (id) => db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(id),
   publicBaseUrl,

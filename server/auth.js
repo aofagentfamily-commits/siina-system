@@ -161,6 +161,6 @@ function sessionCookie(token, maxAgeSeconds) {
 }
 
 module.exports = {
-  COOKIE_NAME, checkEmail, setupPassword, login, userFromToken, revokeToken, readCookie, sessionCookie,
+  COOKIE_NAME, checkEmail, setupPassword, login, userFromToken, revokeToken, readCookie, sessionCookie, hashPassword, verifyPassword,
   allowedEmails, MIN_PASSWORD_LENGTH,
 };

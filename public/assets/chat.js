@@ -72,6 +72,8 @@ async function renderChat(params) {
   if (requested && params.group) S.chat.groupId = params.group;
   if (!S.chat.groupId || !chats.some((c) => c.id === S.chat.groupId)) S.chat.groupId = chats[0].id;
   const active = chats.find((c) => c.id === S.chat.groupId);
+  // A locked room shows the PIN screen instead of its messages until it is unlocked.
+  if (active.locked && !active.unlocked) { renderChatLocked(chats, mentions, active); return; }
   const query = requested ? `around=${requested}&limit=60` : 'limit=80';
   const [{ items: messages }, { items: outbox }, { items: topics }] = await Promise.all([
     apiGet(`/api/telegram/groups/${active.id}/messages?${query}`),

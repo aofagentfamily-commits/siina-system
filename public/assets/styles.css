@@ -1321,3 +1321,31 @@ body[data-route="calendar"] .modal .btn.primary { color: #FFFFFF; }
 @media (max-width: 640px) {
   .notes-pop { position: fixed; left: 12px; right: 12px; top: auto; bottom: 12px; width: auto; max-height: 72vh; }
 }
+
+/* ---------------------------------------------------------------- room lock (pin-*, tgg-lock) */
+.tgg-lock { display: flex; flex-direction: column; gap: 8px; }
+.tgg-lock-pin { display: flex; flex-direction: column; gap: 6px; }
+.tgg-lock-pin[hidden] { display: none; }
+.cv-locked { display: flex; align-items: center; justify-content: center; padding: 24px; }
+.pin-card {
+  width: min(420px, 100%); text-align: center; padding: 32px 24px; border-radius: 26px; color: #FFFFFF;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  background: linear-gradient(180deg, #3D2139, #33203A); border: 1.5px solid #E64A94; box-shadow: 0 0 36px rgba(230, 74, 148, .25);
+}
+.pin-card.is-shake { animation: pinShake .35s; }
+@keyframes pinShake { 20% { transform: translateX(-8px); } 40% { transform: translateX(8px); } 60% { transform: translateX(-5px); } 80% { transform: translateX(5px); } }
+.pin-icon { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; background: rgba(230, 74, 148, .35); color: #FFFFFF; margin-bottom: 4px; }
+.pin-icon .ic { width: 34px; height: 34px; }
+.pin-card h3 { font-size: 1.2rem; }
+.pin-boxes { display: flex; gap: 10px; margin: 14px 0 6px; }
+.pin-box {
+  width: 48px; height: 58px; text-align: center; font: inherit; font-size: 1.5rem; font-weight: 700; color: #FFFFFF;
+  background: #2B1E31; border: 2px solid #FF5AA5; border-radius: 14px; outline: none;
+}
+.pin-box:focus { box-shadow: 0 0 0 3px rgba(255, 90, 165, .35); }
+.pin-error { color: #FFC2D2; min-height: 1.2em; font-size: .9rem; }
+.pin-submit {
+  width: 100%; max-width: 320px; min-height: 52px; border-radius: 999px; border: 0; background: #FF5AA5; color: #FFFFFF;
+  font: inherit; font-weight: 700; font-size: 1.05rem; cursor: pointer; box-shadow: 0 10px 24px rgba(255, 90, 165, .35);
+}
+.pin-forgot { background: none; border: 0; color: #FFB7D5; text-decoration: underline; font: inherit; cursor: pointer; }
