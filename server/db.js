@@ -319,6 +319,21 @@ CREATE TABLE IF NOT EXISTS gold_prices (
 );
 CREATE INDEX IF NOT EXISTS idx_gold_user ON gold_prices(user_id, created_at);
 
+-- Presses of "รับทราบ" buttons: one per person per button and message
+CREATE TABLE IF NOT EXISTS telegram_button_presses (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id TEXT NOT NULL REFERENCES telegram_groups(id) ON DELETE CASCADE,
+  outbox_id TEXT NOT NULL,
+  telegram_message_id INTEGER NOT NULL,
+  button_index INTEGER NOT NULL,
+  from_id TEXT NOT NULL,
+  from_name TEXT NOT NULL,
+  pressed_at TEXT NOT NULL,
+  UNIQUE(outbox_id, button_index, from_id)
+);
+CREATE INDEX IF NOT EXISTS idx_presses_group ON telegram_button_presses(group_id, telegram_message_id);
+
 CREATE TABLE IF NOT EXISTS telegram_group_tags (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

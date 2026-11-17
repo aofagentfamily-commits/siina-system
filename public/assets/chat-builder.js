@@ -177,8 +177,9 @@ function bldRenderButtons() {
       <select class="select" data-bld-field="type" data-idx="${i}">
         <option value="url" ${b.type === 'url' ? 'selected' : ''}>ลิงก์เว็บไซต์ (URL)</option>
         <option value="username" ${b.type === 'username' ? 'selected' : ''}>Telegram Username</option>
+        <option value="ack" ${b.type === 'ack' ? 'selected' : ''}>ปุ่มรับทราบ (บันทึกในระบบ)</option>
       </select>
-      <input class="input" value="${esc(b.target || '')}" placeholder="${b.type === 'username' ? '@username' : 'https://example.com'}" data-bld-field="target" data-idx="${i}">
+      ${b.type === 'ack' ? '<span class="bld-ack-note">กดแล้วบันทึกว่ารับทราบในระบบ</span>' : `<input class="input" value="${esc(b.target || '')}" placeholder="${b.type === 'username' ? '@username' : 'https://example.com'}" data-bld-field="target" data-idx="${i}">`}
       <button type="button" class="bld-icon" data-action="bld-btn-up" data-idx="${i}" aria-label="เลื่อนขึ้น" ${i === 0 ? 'disabled' : ''}>▲</button>
       <button type="button" class="bld-icon" data-action="bld-btn-down" data-idx="${i}" aria-label="เลื่อนลง" ${i === BLD.buttons.length - 1 ? 'disabled' : ''}>▼</button>
       <button type="button" class="bld-icon danger" data-action="bld-btn-del" data-idx="${i}" aria-label="ลบปุ่ม">${icon('trash2', 'sm')}</button>
@@ -218,6 +219,7 @@ function bldButtonsForSend() {
   return BLD.buttons.map((b, i) => {
     const label = String(b.label || '').trim();
     if (!label) throw new Error(`ใส่ชื่อปุ่มที่ ${i + 1}`);
+    if (b.type === 'ack') return { label, type: 'ack' };
     const target = String(b.target || '').trim();
     if (b.type === 'username') {
       if (!/^@?[A-Za-z][A-Za-z0-9_]{4,31}$/.test(target)) throw new Error(`Telegram Username ของปุ่ม “${label}” ไม่ถูกต้อง`);
@@ -334,3 +336,9 @@ FORMS['bld'] = async (form) => {
     renderChat({ keep: true });
   } catch (err) { setFormError(form, err.message); }
 };
+
+// Who pressed a "รับทราบ" button on a message (shown under the message in the room).
+function ackSummaryHtml(a) {
+  const more = a.count > a.names.length ? ' และอื่น ๆ' : '';
+  return `<div class="cv-acks-sum">✓ รับทราบแล้ว ${a.count} คน: ${esc(a.names.slice(0, 5).join(', '))}${more}</div>`;
+}

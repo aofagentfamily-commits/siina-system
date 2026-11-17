@@ -196,7 +196,7 @@ async function registerWebhook(user, id) {
   await callApi(botToken(bot), 'setWebhook', {
     url: `${base}/api/telegram/webhook/${id}`,
     secret_token: bot.webhook_secret,
-    allowed_updates: ['message', 'edited_message'],
+    allowed_updates: ['message', 'edited_message', 'callback_query'],
   });
   return { ok: true };
 }
@@ -648,7 +648,29 @@ function ingestMessage(bot, msg) {
   }
 }
 
+// "รับทราบ" button presses: the bot records who pressed which button of which sent message.
+const ACK_DATA = /^ack:([0-9a-f-]{36}):(\d{1,2})$/;
+function handleCallback(bot, cq) {
+  const answer = (text) => { callApi(botToken(bot), 'answerCallbackQuery', { callback_query_id: cq.id, text }).catch(() => null); };
+  const m = ACK_DATA.exec(String(cq.data || ''));
+  if (!m) { answer(''); return; }
+  const o = db.prepare('SELECT * FROM telegram_outbox WHERE id = ?').get(m[1]);
+  if (!o || !o.telegram_message_id) { answer('ไม่พบข้อความนี้'); return; }
+  const g = db.prepare('SELECT * FROM telegram_groups WHERE id = ? AND bot_id = ?').get(o.group_id, bot.id);
+  if (!g || g.user_id !== o.user_id) { answer(''); return; }
+  const buttons = o.buttons ? JSON.parse(o.buttons) : [];
+  const idx = Number(m[2]);
+  if (!buttons[idx] || buttons[idx].type !== 'ack') { answer(''); return; }
+  const from = cq.from || {};
+  const name = [from.first_name, from.last_name].filter(Boolean).join(' ') || (from.username ? '@' + from.username : 'ไม่ทราบชื่อ');
+  db.prepare(`INSERT OR IGNORE INTO telegram_button_presses (id, user_id, group_id, outbox_id, telegram_message_id, button_index, from_id, from_name, pressed_at)
+    VALUES (?,?,?,?,?,?,?,?,?)`).run(u.uid(), o.user_id, g.id, o.id, o.telegram_message_id, idx, String(from.id || ''), name.slice(0, 80), u.nowIso());
+  answer('รับทราบแล้ว ขอบคุณ');
+  publish(o.user_id, { groupId: g.id, kind: 'ack' });
+}
+
 function processUpdate(bot, update) {
+  if (update.callback_query) { handleCallback(bot, update.callback_query); return; }
   const msg = update.message || update.edited_message;
   if (msg && msg.chat) ingestMessage(bot, msg);
 }
@@ -659,7 +681,7 @@ async function pollBot(bot) {
   const updates = await callApi(token, 'getUpdates', {
     offset: bot.update_offset + 1,
     timeout: 0,
-    allowed_updates: ['message', 'edited_message'],
+    allowed_updates: ['message', 'edited_message', 'callback_query'],
   });
   let maxId = bot.update_offset;
   for (const up of updates) {
@@ -793,7 +815,15 @@ function messageDto(m) {
 function withSenderBot(groupId, userId) {
   const bot = db.prepare(`SELECT b.name, b.avatar_data FROM telegram_groups g
     LEFT JOIN telegram_bots b ON b.id = g.bot_id WHERE g.id = ? AND g.user_id = ?`).get(groupId, userId) || {};
-  return (m) => ({ ...messageDto(m), botName: bot.name || null, botAvatar: bot.avatar_data || null });
+  // who pressed "รับทราบ" on each message of this room
+  const acks = new Map();
+  for (const r of db.prepare('SELECT telegram_message_id, from_name FROM telegram_button_presses WHERE group_id = ? AND user_id = ? ORDER BY pressed_at').all(groupId, userId)) {
+    const a = acks.get(r.telegram_message_id) || { count: 0, names: [] };
+    a.count += 1;
+    if (a.names.length < 20) a.names.push(r.from_name);
+    acks.set(r.telegram_message_id, a);
+  }
+  return (m) => ({ ...messageDto(m), botName: bot.name || null, botAvatar: bot.avatar_data || null, acks: acks.get(m.message_id) || null });
 }
 
 // Latest messages, older pages (before=), or a window around one message (around=) for "jump to message".
@@ -899,7 +929,8 @@ async function deliver(user, outboxId, eventName = 'ส่งข้อควา�
     if (o.thread_id) body.message_thread_id = o.thread_id;
     if (o.reply_to_message_id) body.reply_parameters = { message_id: o.reply_to_message_id, allow_sending_without_reply: true };
     // inline buttons: one link per row, exactly as stored (already validated when saved)
-    if (o.buttons) body.reply_markup = { inline_keyboard: JSON.parse(o.buttons).map((b) => [{ text: b.label, url: b.url }]) };
+    if (o.buttons) body.reply_markup = { inline_keyboard: JSON.parse(o.buttons).map((b, i) => [b.type === 'ack'
+      ? { text: b.label, callback_data: `ack:${o.id}:${i}` } : { text: b.label, url: b.url }]) };
     const sent = await callApi(botToken(bot), 'sendMessage', body);
     db.prepare("UPDATE telegram_outbox SET status='sent', telegram_message_id=?, error=NULL, updated_at=? WHERE id=?")
       .run(sent.message_id, u.nowIso(), o.id);

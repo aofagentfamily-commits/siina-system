@@ -133,6 +133,7 @@ function buttonsInput(list) {
   return list.map((b) => {
     const label = u.str(b && b.label, { max: 40, required: true, field: 'ชื่อปุ่ม' });
     if (b.type === 'url') return { label, type: 'url', url: u.httpUrlOpt(b.target, 'ลิงก์ของปุ่ม') };
+    if (b.type === 'ack') return { label, type: 'ack' };
     if (b.type === 'username') {
       const name = String(b.target || '').trim().replace(/^@/, '');
       if (!/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(name)) throw new u.HttpError(400, 'Telegram Username ไม่ถูกต้อง', 'VALIDATION');

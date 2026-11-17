@@ -271,6 +271,7 @@ function bubbleHtml(m) {
       ${attachmentsHtml(m)}
       <div class="cv-actions"><button data-action="chat-reply" data-id="${m.id}" data-msgid="${m.messageId}" data-text="${esc(m.text.slice(0, 80))}">${icon('reply', 'sm')} ตอบกลับ</button></div>
       ${isTag ? ackButtonHtml(m) : ''}
+      ${m.acks ? ackSummaryHtml(m.acks) : ''}
     </div>
   </div>`;
 }
