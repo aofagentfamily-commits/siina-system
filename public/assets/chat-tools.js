@@ -55,18 +55,12 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closePlusMenu();
 });
 
-ACTIONS['chat-menu-file'] = () => {
-  closePlusMenu();
-  const input = $('#cvFile');
-  if (input) input.click();
-};
-ACTIONS['chat-menu-templates'] = () => { closePlusMenu(); openTemplates(); };
-ACTIONS['chat-menu-stickers'] = () => { closePlusMenu(); openStickers(); };
-
-// Hidden file input (created once).
-(function ensureFileInput() {
-  if (document.getElementById('cvFile')) return;
-  const input = document.createElement('input');
+// The hidden file input is created when it is needed: the app replaces the whole page on sign-in,
+// which would remove an input created at load time.
+function getFileInput() {
+  let input = document.getElementById('cvFile');
+  if (input) return input;
+  input = document.createElement('input');
   input.type = 'file';
   input.id = 'cvFile';
   input.hidden = true;
@@ -77,7 +71,29 @@ ACTIONS['chat-menu-stickers'] = () => { closePlusMenu(); openStickers(); };
     if (file) openFilePreview(file);
   });
   document.body.appendChild(input);
-})();
+  return input;
+}
+ACTIONS['chat-menu-file'] = () => {
+  closePlusMenu();
+  getFileInput().click();
+};
+// Paste an image (for example a screenshot) into the message box: it opens the same preview and send.
+document.addEventListener('paste', (e) => {
+  const box = e.target;
+  if (!box || box.name !== 'text' || !box.closest || !box.closest('.cv-composer')) return;
+  const items = Array.from((e.clipboardData && e.clipboardData.items) || []);
+  const img = items.find((it) => it.kind === 'file' && /^image\/(jpeg|png|webp)$/.test(it.type));
+  if (!img) return;
+  const file = img.getAsFile();
+  if (!file) return;
+  e.preventDefault();
+  const named = new File([file], 'pasted-' + Date.now() + '.' + (file.type.split('/')[1] || 'png'), { type: file.type });
+  openFilePreview(named);
+});
+ACTIONS['chat-menu-templates'] = () => { closePlusMenu(); openTemplates(); };
+ACTIONS['chat-menu-stickers'] = () => { closePlusMenu(); openStickers(); };
+
+
 
 // ---------------------------------------------------------------- file preview and send
 function openFilePreview(file) {

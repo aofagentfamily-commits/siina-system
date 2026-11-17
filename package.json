@@ -6,7 +6,7 @@
   "main": "server/index.js",
   "scripts": {
     "start": "node --env-file-if-exists=.env server/index.js",
-    "test": "node --test test/app.test.js test/migration.test.js test/topics.test.js test/realtime.test.js test/templates.test.js test/notes.test.js test/lock.test.js test/polling.test.js test/clear.test.js test/categories.test.js test/privacy.test.js test/vault.test.js test/live.test.js test/ack.test.js"
+    "test": "node --test test/app.test.js test/migration.test.js test/topics.test.js test/realtime.test.js test/templates.test.js test/notes.test.js test/lock.test.js test/polling.test.js test/clear.test.js test/categories.test.js test/privacy.test.js test/vault.test.js test/live.test.js test/ack.test.js test/file.test.js"
   },
   "engines": {
     "node": ">=22.13"
