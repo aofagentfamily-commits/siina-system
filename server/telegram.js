@@ -754,14 +754,22 @@ function clearHistory(user, groupId, threadId) {
   return { ok: true, deleted: summary.c, removedFiles };
 }
 
-function chatList(user) {
+// category: 'all' = enabled rooms; a category id = the rooms in that category; omitted = every room.
+function chatList(user, category) {
+  let where = 'g.user_id = ?';
+  const args = [user.id];
+  if (category === 'all') where += ' AND g.enabled = 1';
+  else if (category) {
+    where += ' AND g.id IN (SELECT group_id FROM telegram_category_groups WHERE category_id = ? AND user_id = ?)';
+    args.push(String(category), user.id);
+  }
   return db.prepare(`
     SELECT g.id, g.title, g.enabled, g.status, g.bot_id, g.avatar_data, (g.lock_hash IS NOT NULL) AS is_locked,
       (SELECT text FROM telegram_messages m WHERE m.group_id = g.id ORDER BY sent_at DESC LIMIT 1) AS last_text,
       (SELECT sent_at FROM telegram_messages m WHERE m.group_id = g.id ORDER BY sent_at DESC LIMIT 1) AS last_at,
       (SELECT COUNT(*) FROM telegram_messages m WHERE m.group_id = g.id AND m.read_at IS NULL AND m.is_outgoing = 0) AS unread,
       (SELECT COUNT(*) FROM telegram_messages m WHERE m.group_id = g.id AND m.read_at IS NULL AND m.is_outgoing = 0 AND m.matched != '[]') AS mentions
-    FROM telegram_groups g WHERE g.user_id = ? ORDER BY last_at DESC NULLS LAST, g.title`).all(user.id).map((r) => ({
+    FROM telegram_groups g WHERE ${where} ORDER BY last_at DESC NULLS LAST, g.title`).all(...args).map((r) => ({
     id: r.id, title: r.title, enabled: !!r.enabled, status: r.bot_id ? r.status : 'unlinked',
     avatarData: r.avatar_data || null,
     locked: !!r.is_locked, unlocked: !r.is_locked || isUnlocked(user.id, r.id),

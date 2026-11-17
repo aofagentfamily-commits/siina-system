@@ -54,13 +54,21 @@ function cvTimeLabel(iso) {
 
 async function renderChat(params) {
   setPageHead(PAGE_TITLES.chat, 'จัดการข้อความจากกลุ่มที่เชื่อมต่อ คัดกรอง และตอบกลับได้ในระบบเดียว');
+  if (!S.chat.category) S.chat.category = 'all';
+  // A fresh visit opens no room: only an explicit room in the link (or a kept room) is selected.
+  if (!params || (!params.group && !params.keep && !params.msg)) S.chat.groupId = null;
   if (params && params.tab) S.chat.tab = params.tab;
   if (params && params.group) S.chat.groupId = params.group;
   fillPage(`<div class="card cv-loading"><span class="spinner"></span><span>กำลังโหลดข้อความ...</span></div>`);
-  const [{ items: chats }, { items: mentions }] = await Promise.all([apiGet('/api/telegram/chats'), apiGet('/api/telegram/mentions')]);
+  const [{ items: chats }, { items: mentions }, { items: categories }] = await Promise.all([
+    apiGet('/api/telegram/chats?category=' + encodeURIComponent(S.chat.category)),
+    apiGet('/api/telegram/mentions'),
+    apiGet('/api/telegram/categories'),
+  ]);
   S.chat.chats = chats;
   S.chat.mentions = mentions;
-  if (!chats.length) {
+  S.chat.categories = categories;
+  if (!chats.length && S.chat.category === 'all') {
     fillPage(`<div class="page-head"><div><h2>ห้องแชท Telegram</h2><p>เชื่อมต่อ Telegram Bot เพื่อรวบรวมข้อความสำคัญ</p></div></div>
       <div class="card" style="text-align:center;padding:40px">${eggHtml({ size: 90 })}
         <h3 style="margin:16px 0 6px">ยังไม่มีกลุ่ม Telegram</h3>
@@ -70,8 +78,9 @@ async function renderChat(params) {
   }
   const requested = params && params.msg ? Number(params.msg) : null;
   if (requested && params.group) S.chat.groupId = params.group;
-  if (!S.chat.groupId || !chats.some((c) => c.id === S.chat.groupId)) S.chat.groupId = chats[0].id;
-  const active = chats.find((c) => c.id === S.chat.groupId);
+  if (S.chat.groupId && !chats.some((c) => c.id === S.chat.groupId)) S.chat.groupId = null;
+  const active = chats.find((c) => c.id === S.chat.groupId) || null;
+  if (!active) { renderChatWelcome(chats, mentions); return; }
   // A locked room shows the PIN screen instead of its messages until it is unlocked.
   if (active.locked && !active.unlocked) { renderChatLocked(chats, mentions, active); return; }
   const query = requested ? `around=${requested}&limit=60` : 'limit=80';
@@ -103,6 +112,7 @@ async function renderChat(params) {
         <a class="btn primary" href="#/settings?tab=telegram">${icon('settings')} จัดการ Telegram</a>
       </div>
     </div>
+    ${catBarHtml()}
     <div class="cv-layout${requested || S.chat.showMobileChat ? ' show-chat' : ''}" id="chatLayout">
       <aside class="cv-list" aria-label="รายการแชท">
         <div class="cv-tabs" role="tablist">
@@ -174,6 +184,11 @@ async function renderChat(params) {
 
 // ---------------------------------------------------------------- list
 function chatListHtml() {
+  if (S.chat.tab !== 'mention' && !S.chat.chats.length) {
+    return S.chat.category === 'all'
+      ? emptyBox('ยังไม่มีกลุ่มที่เปิดติดตามอยู่ เปิดการติดตามกลุ่มได้ที่หน้าจัดการ Telegram')
+      : `<div class="empty cv-empty"><b>ยังไม่มีห้องแชทในหมวดนี้</b><small>สามารถจัดหมวดหมู่ห้องแชทได้จากเมนูจัดการหมวด (ไอคอน + ด้านบน หรือกดค้างที่หมวด)</small></div>`;
+  }
   if (S.chat.tab === 'mention') {
     const q = S.chat.listQuery.trim().toLowerCase();
     const rows = S.chat.mentions.filter((m) => !q || (m.groupTitle + ' ' + m.senderName + ' ' + m.text).toLowerCase().includes(q));

@@ -213,7 +213,7 @@ function renderChatLocked(chats, mentions, active) {
   S.chat.mentions = mentions;
   S.chat.groupId = active.id;
   const boxes = [0, 1, 2, 3, 4, 5].map((i) => `<input class="pin-box" inputmode="numeric" maxlength="1" autocomplete="off" aria-label="หลักที่ ${i + 1}">`).join('');
-  fillPage(`<div class="cv-layout show-chat" id="chatLayout">
+  fillPage(`${catBarHtml()}<div class="cv-layout show-chat" id="chatLayout">
     <aside class="cv-list" aria-label="รายการแชท"><div class="cv-items" id="cvItems">${chatListHtml()}</div></aside>
     <section class="cv-main cv-locked" aria-label="ห้องแชทถูกล็อก">
       <div class="pin-card" data-group="${esc(active.id)}">

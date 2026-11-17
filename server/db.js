@@ -246,6 +246,24 @@ CREATE TABLE IF NOT EXISTS telegram_history_marks (
 );
 CREATE INDEX IF NOT EXISTS idx_history_marks_group ON telegram_history_marks(group_id);
 
+-- Chat categories (หมวดห้องแชท). A room can be in many categories; deleting a category removes only its links.
+CREATE TABLE IF NOT EXISTS telegram_categories (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  icon TEXT NOT NULL,
+  color TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS telegram_category_groups (
+  category_id TEXT NOT NULL REFERENCES telegram_categories(id) ON DELETE CASCADE,
+  group_id TEXT NOT NULL REFERENCES telegram_groups(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  PRIMARY KEY (category_id, group_id)
+);
+CREATE INDEX IF NOT EXISTS idx_category_groups_group ON telegram_category_groups(group_id);
+
 CREATE TABLE IF NOT EXISTS telegram_group_tags (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
