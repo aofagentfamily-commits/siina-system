@@ -591,6 +591,13 @@ function messageDto(m) {
   };
 }
 
+// Adds the group bot's name and picture to each message, so bot messages show the bot the user set up.
+function withSenderBot(groupId, userId) {
+  const bot = db.prepare(`SELECT b.name, b.avatar_data FROM telegram_groups g
+    LEFT JOIN telegram_bots b ON b.id = g.bot_id WHERE g.id = ? AND g.user_id = ?`).get(groupId, userId) || {};
+  return (m) => ({ ...messageDto(m), botName: bot.name || null, botAvatar: bot.avatar_data || null });
+}
+
 // Latest messages, older pages (before=), or a window around one message (around=) for "jump to message".
 function groupMessages(user, groupId, q) {
   getGroup(user, groupId);
@@ -602,12 +609,12 @@ function groupMessages(user, groupId, q) {
       ORDER BY message_id DESC LIMIT ?`).all(groupId, user.id, target, half + 1);
     const after = db.prepare(`SELECT * FROM telegram_messages WHERE group_id = ? AND user_id = ? AND message_id > ?
       ORDER BY message_id ASC LIMIT ?`).all(groupId, user.id, target, half);
-    return [...before.reverse(), ...after].map(messageDto);
+    return [...before.reverse(), ...after].map(withSenderBot(groupId, user.id));
   }
   const before = q.before ? u.int(q.before, { min: 0, field: 'ตำแหน่งข้อความ' }) : null;
   const rows = db.prepare(`SELECT * FROM telegram_messages WHERE group_id = ? AND user_id = ?
     AND (? IS NULL OR message_id < ?) ORDER BY message_id DESC LIMIT ?`).all(groupId, user.id, before, before, limit);
-  return rows.reverse().map(messageDto);
+  return rows.reverse().map(withSenderBot(groupId, user.id));
 }
 
 // 👌 on a tagged message: the user acknowledged it. This is separate from the bot's auto-reply.

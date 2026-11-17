@@ -223,15 +223,18 @@ function bubbleHtml(m) {
   const isTag = !isBot && m.matched.includes('mention');
   const kind = isBot ? 'cv-bot' : isTag ? (m.ackedAt ? 'cv-tagged is-acked' : 'cv-tagged') : 'cv-normal';
   const reasonBadge = !isBot && m.matched.includes('reply_to_me') ? '<span class="cv-badge purple">ตอบกลับคุณ</span>' : '';
+  const botName = m.botName || 'SIINA Bot';
   const avatar = isBot
-    ? `<span class="cv-av cv-av-bot">${eggHtml({ size: 40 })}</span>`
+    ? (m.botAvatar
+      ? `<span class="cv-av cv-av-bot cv-av-pic"><img src="${esc(m.botAvatar)}" alt=""></span>`
+      : `<span class="cv-av cv-av-bot">${eggHtml({ size: 40 })}</span>`)
     : `<span class="cv-av">${esc(initials(m.senderName))}</span>`;
   return `<div class="cv-row ${isBot ? 'is-bot' : ''}" data-msgid="${m.messageId}">
     ${avatar}
     <div class="cv-bubble ${kind}">
       <div class="cv-meta">
         ${S.chat.topics.length && S.chat.topic === 'all' ? `<span class="cv-topic-tag">${esc(topicName(m.threadId))}</span>` : ''}
-        <b>${esc(isBot ? 'ไข่ดาว (SIINA Bot)' : m.senderName)}</b>
+        <b>${esc(isBot ? botName : m.senderName)}</b>
         ${isBot ? '<span class="cv-badge pink">บอท</span>' : ''}
         ${isTag ? '<span class="cv-badge yellow">★ แท็กถึงคุณ</span>' : ''}
         ${reasonBadge}
