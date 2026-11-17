@@ -47,6 +47,9 @@ async function boot() {
     renderLogin();
     return;
   }
+  // Every page load starts locked: the private area needs the PIN again after a refresh.
+  await apiPost('/api/private/lock').catch(() => null);
+  S.priv = { ...(S.priv || {}), unlocked: false };
   applyDisplaySettings();
   renderShell();
   history.replaceState(null, '', '#/shop');

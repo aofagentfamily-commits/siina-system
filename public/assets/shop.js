@@ -314,6 +314,7 @@ async function refreshPriv() {
   return S.priv;
 }
 function enterPrivate(status) {
+  closeAllModals(); // no leftover popup covers the page or keeps focus
   S.priv = status || { ...(S.priv || {}), unlocked: true };
   S.priv.unlocked = true;
   navigate('#/home');
