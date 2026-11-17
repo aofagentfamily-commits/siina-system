@@ -24,6 +24,7 @@ const SHOP_PRODUCTS = [
 ];
 
 S.shopCart = S.shopCart || 0;
+S.shopItems = S.shopItems || [];
 S.shopCat = S.shopCat || 'all';
 S.shopQuery = '';
 
@@ -121,7 +122,8 @@ ACTIONS['shop-cat'] = (el) => {
   if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 ACTIONS['shop-add'] = (el) => {
-  S.shopCart += 1;
+  S.shopItems.push(el.dataset.id);
+  S.shopCart = S.shopItems.length;
   const count = document.querySelector('.shop-count');
   if (count) count.textContent = String(S.shopCart);
   const p = SHOP_PRODUCTS.find((x) => x.id === el.dataset.id);
@@ -146,13 +148,48 @@ function enterPrivate(status) {
   navigate('#/home');
 }
 
-// Cart icon: the private entry. With no PIN yet, the first visit sets one; otherwise the PIN is asked.
-ACTIONS['shop-cart'] = async () => {
+// Normal tap on the cart: the shopping cart (demo). Holding it for 2 seconds: the private entry.
+ACTIONS['shop-cart'] = () => {
+  const lines = S.shopItems.map((id) => SHOP_PRODUCTS.find((p) => p.id === id)).filter(Boolean);
+  const total = lines.reduce((n, p) => n + p.price, 0);
+  openModal({
+    title: 'ตะกร้าสินค้า',
+    body: `<div class="shop-cart-list">
+      ${lines.length ? lines.map((p) => `<div class="shop-cart-line"><span>${esc(p.name)}</span><b>${shopPrice(p.price)}</b></div>`).join('')
+        : '<p class="muted">ยังไม่มีสินค้าในตะกร้า</p>'}
+      <div class="shop-cart-total"><span>รวม</span><b>${shopPrice(total)}</b></div>
+      <p class="muted small">${esc(SHOP_DEMO_NOTE)}</p>
+      <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-action="close-modal">ปิด</button>
+        <button type="button" class="btn" disabled title="ยังไม่เปิดใช้งานการชำระเงิน">ชำระเงิน (ยังไม่เปิดใช้งาน)</button></div>
+    </div>`,
+  });
+};
+const SHOP_PRIVATE_PRESS_MS = 2000;
+let shopPressTimer = 0;
+let shopPressFired = false;
+document.addEventListener('pointerdown', (e) => {
+  if (!e.target.closest || !e.target.closest('[data-action="shop-cart"]')) return;
+  shopPressFired = false;
+  clearTimeout(shopPressTimer);
+  shopPressTimer = setTimeout(() => { shopPressFired = true; shopPrivateEntry(); }, SHOP_PRIVATE_PRESS_MS);
+});
+['pointerup', 'pointerleave', 'pointercancel'].forEach((t) => document.addEventListener(t, () => clearTimeout(shopPressTimer)));
+// After a 2-second press, the click that follows does not open the cart.
+document.addEventListener('click', (e) => {
+  if (shopPressFired && e.target.closest && e.target.closest('[data-action="shop-cart"]')) {
+    shopPressFired = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }
+}, true);
+
+// The private entry: with no PIN yet, the first visit sets one; otherwise the PIN is asked.
+async function shopPrivateEntry() {
   const st = await refreshPriv().catch(() => null);
   if (!st) { toast('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่', 'err'); return; }
   if (st.unlocked) { enterPrivate(st); return; }
   privPopup(st.hasPin ? 'unlock' : 'setup');
-};
+}
 ACTIONS['priv-back'] = async () => {
   await apiPost('/api/private/lock').catch(() => null);
   if (S.priv) S.priv.unlocked = false;

@@ -1600,3 +1600,7 @@ body[data-route="shop"] .app { display: block !important; }
 .priv-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .sec-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 0; border-top: 1px solid rgba(255, 183, 213, .18); flex-wrap: wrap; }
 .sec-row small { display: block; }
+
+.shop-cart-list { display: flex; flex-direction: column; gap: 8px; }
+.shop-cart-line, .shop-cart-total { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid rgba(255, 183, 213, .2); }
+.shop-cart-total { font-weight: 800; border-bottom: 0; }
