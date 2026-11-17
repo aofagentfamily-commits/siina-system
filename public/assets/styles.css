@@ -1447,3 +1447,12 @@ body[data-route="calendar"] .modal .btn.primary { color: #FFFFFF; }
 }
 
 .tgg-track-row { display: flex; align-items: center; gap: 8px; }
+
+/* padlock button next to the tracking switch on each group card */
+.tgg-lockbtn {
+  width: 36px; height: 36px; border-radius: 50%; display: inline-grid; place-items: center; flex: none; padding: 0; cursor: pointer;
+  background: #5A3A5F; color: #FFFFFF; border: 1.5px solid #3B82F6; transition: background .2s ease, transform .15s ease;
+}
+.tgg-lockbtn:hover { transform: translateY(-1px); }
+.tgg-lockbtn .ic { width: 16px; height: 16px; }
+.tgg-lockbtn.is-on { background: #FF5AA5; border-color: #3B82F6; box-shadow: 0 0 12px rgba(255, 90, 165, .5); }

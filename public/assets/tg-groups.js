@@ -41,12 +41,11 @@ function tgGroupCard(g) {
         <p>Chat ID</p>
         <p class="tgg-id">${esc(g.chatId)}</p>
       </div>
-      ${tgGroupLockSwitch(g)}
     </header>
     <dl class="tgg-meta">
       <dt>บอทที่เชื่อมต่อ</dt><dd>${unlinked ? '<span class="tgg-muted">ยังไม่ได้เชื่อมต่อบอท</span>' : esc(g.botName)}</dd>
       <dt>สถานะ</dt><dd><span class="tgg-pill ${st[1]}">${esc(st[0])}</span></dd>
-      <dt>การติดตาม</dt><dd class="tgg-track-row"><label class="switch" title="เปิด = รับและบันทึกข้อความจากกลุ่มนี้ / ปิด = ไม่รับข้อความ"><input type="checkbox" data-change="tg-group-toggle" data-id="${esc(g.id)}" ${g.enabled ? 'checked' : ''}><span></span></label> <span>${g.enabled ? 'เปิดอยู่' : 'ปิดอยู่'}</span></dd>
+      <dt>การติดตาม</dt><dd class="tgg-track-row"><label class="switch" title="เปิด = รับและบันทึกข้อความจากกลุ่มนี้ / ปิด = ไม่รับข้อความ"><input type="checkbox" data-change="tg-group-toggle" data-id="${esc(g.id)}" ${g.enabled ? 'checked' : ''}><span></span></label> <span>${g.enabled ? 'เปิดอยู่' : 'ปิดอยู่'}</span> ${tgGroupLockSwitch(g)}</dd>
       <dt>ตอบรับอัตโนมัติ</dt><dd>${g.autoReply ? 'เปิด' : 'ปิด'}</dd>
       <dt>การล็อกห้อง</dt><dd>${g.locked ? '🔒 ล็อกอยู่' : '🔓 ไม่ได้ล็อก'}</dd>
     </dl>
@@ -316,9 +315,9 @@ document.addEventListener('paste', (e) => {
 
 // ---------------------------------------------------------------- room lock: switch, popup section, PIN rules
 function tgGroupLockSwitch(g) {
-  return `<button type="button" class="tgg-switch tgg-switch-lock" role="switch" aria-checked="${g.locked ? 'true' : 'false'}"
-    data-action="tg-group-lock" data-id="${esc(g.id)}" aria-label="ล็อกห้องแชท"
-    title="${g.locked ? 'ล็อกอยู่ กดเพื่อปิดการล็อก' : 'กดเพื่อล็อกห้องแชทด้วยรหัส 6 หลัก'}"><span class="knob">${icon('lock', 'sm')}</span></button>`;
+  return `<button type="button" class="tgg-lockbtn ${g.locked ? 'is-on' : ''}" data-action="tg-group-lock" data-id="${esc(g.id)}"
+    aria-label="${g.locked ? 'ห้องถูกล็อก กดเพื่อปิดการล็อก' : 'กดเพื่อล็อกห้องแชทด้วยรหัส 6 หลัก'}"
+    aria-pressed="${g.locked ? 'true' : 'false'}" title="${g.locked ? 'ล็อกอยู่ กดเพื่อปิดการล็อก' : 'ล็อกห้องแชทด้วยรหัส 6 หลัก'}">${icon('lock', 'sm')}</button>`;
 }
 
 function tggPinField(name, label) {
