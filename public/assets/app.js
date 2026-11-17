@@ -10,7 +10,7 @@ const NAV = [
   { k: 'settings', label: 'ตั้งค่า', i: 'settings' },
 ];
 const PAGES = {
-  home: renderHome, chat: renderChat, projects: renderProjects,
+  shop: renderShop, home: renderHome, chat: renderChat, projects: renderProjects,
   calendar: renderCalendar, summary: renderSummary, settings: renderSettings,
 };
 const LOGIN_TILES = [
@@ -25,6 +25,7 @@ async function loadMe() {
   S.user = me.user;
   S.settings = me.settings;
   S.tz = me.user.timezone || 'Asia/Bangkok';
+  S.priv = await apiGet('/api/private/status').catch(() => ({ unlocked: false, hasPin: false, enabled: true }));
 }
 
 function applyDisplaySettings() {
@@ -47,7 +48,7 @@ async function boot() {
   }
   applyDisplaySettings();
   renderShell();
-  if (!location.hash) history.replaceState(null, '', '#/home');
+  history.replaceState(null, '', '#/shop');
   route();
   refreshBell();
   refreshChatBadge();
@@ -247,6 +248,7 @@ function renderShell() {
         <div class="profile">${avatarHtml(S.user)}
           <div class="who"><b>${esc(S.user.displayName || S.user.email)}</b><small>${esc(S.user.email)}</small><span class="online">ออนไลน์</span></div>
         </div>
+        <button class="btn sm" data-action="priv-back" aria-label="กลับไป SIINA SHOP">${icon('cart')}<span class="hide-collapsed">กลับไป SIINA SHOP</span></button>
         <button class="btn sm" data-action="logout" aria-label="ออกจากระบบ">${icon('logout')}<span class="hide-collapsed">ออกจากระบบ</span></button>
       </div>
     </aside>
@@ -334,6 +336,11 @@ async function route() {
   closeAllModals();
   hidePop();
   let { name, params } = parseHash();
+  if (name !== 'shop' && !(S.priv && S.priv.unlocked)) {
+    name = 'shop';
+    params = {};
+    history.replaceState(null, '', '#/shop');
+  }
   if (!PAGES[name]) {
     name = 'home';
     history.replaceState(null, '', '#/home');
@@ -349,6 +356,7 @@ async function route() {
   } catch (err) {
     if (seq !== routeSeq) return;
     if (err.status === 401) { renderLogin(); return; }
+    if (err.status === 423) { if (S.priv) S.priv.unlocked = false; navigate('#/shop'); return; }
     fillPage(`<div class="card" style="text-align:center;padding:30px">
       <p style="margin-bottom:14px">${esc(err.message || 'โหลดหน้านี้ไม่สำเร็จ')}</p>
       <button class="btn" data-action="retry">${icon('refresh')} ลองอีกครั้ง</button></div>`);

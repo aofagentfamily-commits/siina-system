@@ -6,6 +6,7 @@ const auth = require('./auth');
 const f = require('./features');
 const tg = require('./telegram');
 const notes = require('./notes');
+const privacy = require('./privacy');
 const categories = require('./categories');
 const tpl = require('./templates');
 const { db } = require('./db');
@@ -19,7 +20,8 @@ const ROUTES = [];
 function add(method, path, handler, opts = {}) {
   const keys = [];
   const pattern = path.replace(/:(\w+)/g, (_, k) => { keys.push(k); return '([^/]+)'; });
-  ROUTES.push({ method, re: new RegExp(`^${pattern}/?$`), keys, handler, auth: opts.auth !== false });
+  // Routes that need the account to be signed in are private by default: they also need the private area unlocked.
+  ROUTES.push({ method, re: new RegExp(`^${pattern}/?$`), keys, handler, auth: opts.auth !== false, private: opts.private !== false });
 }
 
 // ---------------------------------------------------------------- auth
@@ -39,10 +41,17 @@ add('POST', '/api/auth/logout', (c) => {
   c.setCookie(auth.sessionCookie('', 0));
   return { ok: true };
 }, { auth: false });
-add('GET', '/api/auth/me', (c) => ({ user: f.userDto(c.user) }));
+add('GET', '/api/auth/me', (c) => ({ user: f.userDto(c.user) }), { private: false });
 
 // ---------------------------------------------------------------- profile & settings
-add('GET', '/api/me', (c) => ({ user: f.userDto(c.user), settings: f.getSettings(c.user.id) }));
+add('GET', '/api/me', (c) => ({ user: f.userDto(c.user), settings: f.getSettings(c.user.id) }), { private: false });
+add('GET', '/api/private/status', (c) => privacy.status(c.user, c.token), { private: false });
+add('POST', '/api/private/pin', (c) => privacy.setPin(c.user, c.token, c.body), { private: false });
+add('POST', '/api/private/unlock', (c) => privacy.unlock(c.user, c.token, c.body.pin), { private: false });
+add('POST', '/api/private/lock', (c) => privacy.lock(c.token), { private: false });
+add('POST', '/api/private/enabled', (c) => privacy.setEnabled(c.user, c.token, c.body), { private: false });
+add('POST', '/api/private/session', (c) => privacy.setSessionMinutes(c.user, c.token, c.body));
+add('POST', '/api/private/logout-others', (c) => privacy.logoutOthers(c.user, c.token));
 add('PATCH', '/api/me', (c) => ({ user: f.updateProfile(c.user, c.body) }));
 add('GET', '/api/settings', (c) => ({ settings: f.getSettings(c.user.id) }));
 add('PUT', '/api/settings', (c) => ({ settings: f.updateSettings(c.user, c.body) }));
@@ -216,6 +225,7 @@ async function handleApi(req, res, url) {
   if (req.method === 'GET' && url.pathname === '/api/telegram/stream') {
     const user = auth.userFromToken(auth.readCookie(req, auth.COOKIE_NAME));
     if (!user) throw new HttpError(401, 'กรุณาเข้าสู่ระบบ', 'UNAUTHORIZED');
+    if (!privacy.isUnlocked(user, auth.readCookie(req, auth.COOKIE_NAME))) throw new HttpError(423, 'กรุณายืนยันรหัสส่วนตัวก่อนเข้าพื้นที่นี้', 'PRIVATE_LOCKED');
     return openStream(req, res, user);
   }
   const compiled = compile(req.method, url.pathname);
@@ -233,6 +243,9 @@ async function handleApi(req, res, url) {
   const token = auth.readCookie(req, auth.COOKIE_NAME);
   const user = route.auth ? auth.userFromToken(token) : null;
   if (route.auth && !user) throw new HttpError(401, 'กรุณาเข้าสู่ระบบ', 'UNAUTHORIZED');
+  if (route.auth && route.private && !privacy.isUnlocked(user, token)) {
+    throw new HttpError(423, 'กรุณายืนยันรหัสส่วนตัวก่อนเข้าพื้นที่นี้', 'PRIVATE_LOCKED');
+  }
 
   const headers = {};
   const setCookies = [];

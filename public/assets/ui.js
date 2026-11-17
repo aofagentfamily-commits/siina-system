@@ -10,6 +10,7 @@ const ICON_PATHS = {
   calendar: 'M4 5h16v15H4z M4 9h16 M8 3v4 M16 3v4',
   bell: 'M6 16V11a6 6 0 1 1 12 0v5l2 2H4z M10 20a2 2 0 0 0 4 0',
   notebook: 'M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6z M6 3v18 M10 8h6 M10 12h6',
+  cart: 'M3 4h2l2.4 10h10.2l2-7H6.2 M9 19a1 1 0 1 0 0 .01 M17 19a1 1 0 1 0 0 .01',
   lock: 'M7 11V8a5 5 0 0 1 10 0v3 M6 11h12v9H6z',
   eye: 'M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12z M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
   copy: 'M9 9h10v10H9z M5 15V5h10',

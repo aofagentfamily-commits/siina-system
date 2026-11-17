@@ -832,7 +832,7 @@ ACTIONS['notif-open'] = async (el) => {
 S.settingsTab = 'profile';
 const SETTINGS_TABS = [
   ['profile', 'โปรไฟล์', 'user'], ['telegram', 'Telegram', 'chat'], ['notify', 'การแจ้งเตือน', 'bell'],
-  ['display', 'การแสดงผล', 'settings'], ['data', 'ข้อมูลระบบ', 'download'],
+  ['display', 'การแสดงผล', 'settings'], ['security', 'ความปลอดภัย', 'shield'], ['data', 'ข้อมูลระบบ', 'download'],
 ];
 
 async function renderSettings(params) {
@@ -847,7 +847,7 @@ async function renderSettings(params) {
       <div class="settings-body" id="settingsBody"><div class="card"><span class="spinner"></span></div></div>
     </div>`);
   const body = $('#settingsBody');
-  const fn = { profile: settingsProfile, telegram: settingsTelegram, notify: settingsNotify, display: settingsDisplay, data: settingsData }[S.settingsTab];
+  const fn = { profile: settingsProfile, telegram: settingsTelegram, notify: settingsNotify, display: settingsDisplay, security: settingsSecurity, data: settingsData }[S.settingsTab];
   try { await fn(body); } catch (err) { body.innerHTML = `<div class="card">${esc(err.message)}</div>`; }
 }
 ACTIONS['set-tab'] = (el) => { S.settingsTab = el.dataset.tab; navigate('#/settings?tab=' + S.settingsTab); };

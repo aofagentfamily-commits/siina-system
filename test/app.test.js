@@ -89,6 +89,16 @@ test('auth: setup stores the password once and starts a session', async () => {
   assert.equal(r.status, 200);
   assert.ok(cookie.startsWith('siina_sid='));
   assert.equal(r.body.user.email, 'owner@example.com');
+  // The private area is locked after sign-in until the PIN is set (or entered) on this device.
+  const locked = await api('GET', '/api/telegram/groups');
+  assert.equal(locked.status, 423);
+  const before = await api('GET', '/api/private/status');
+  assert.equal(before.body.unlocked, false);
+  assert.equal(before.body.hasPin, false);
+  const pinSet = await api('POST', '/api/private/pin', { pin: '482915', confirm: '482915' });
+  assert.equal(pinSet.status, 200);
+  assert.equal(pinSet.body.unlocked, true);
+  assert.equal((await api('GET', '/api/telegram/groups')).status, 200);
   const again = await api('POST', '/api/auth/setup', body);
   assert.equal(again.status, 409);
   const check = await api('POST', '/api/auth/check', { email: 'owner@example.com' });
@@ -106,6 +116,10 @@ test('auth: wrong password is rejected, correct password signs in', async () => 
   const ok = await api('POST', '/api/auth/login', { email: 'owner@example.com', password: 'long-enough-pass-1' });
   assert.equal(ok.status, 200);
   assert.ok(cookie.startsWith('siina_sid='));
+  // A new sign-in opens the private area only after the PIN is entered again.
+  assert.equal((await api('GET', '/api/telegram/groups')).status, 423);
+  assert.equal((await api('POST', '/api/private/unlock', { pin: '000000' })).status, 403);
+  assert.equal((await api('POST', '/api/private/unlock', { pin: '482915' })).status, 200);
 });
 
 test('session persists across requests and profile is readable', async () => {

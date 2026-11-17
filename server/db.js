@@ -264,6 +264,15 @@ CREATE TABLE IF NOT EXISTS telegram_category_groups (
 );
 CREATE INDEX IF NOT EXISTS idx_category_groups_group ON telegram_category_groups(group_id);
 
+-- Private area (SIINA SYSTEM behind SIINA SHOP). One row per account; the unlock itself lives on the login session.
+CREATE TABLE IF NOT EXISTS private_access (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  pin_hash TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  session_minutes INTEGER NOT NULL DEFAULT 30,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS telegram_group_tags (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -379,6 +388,7 @@ for (const [table, col, def] of [
   ['telegram_outbox', 'thread_id', 'INTEGER'],
   ['telegram_groups', 'is_forum', 'INTEGER NOT NULL DEFAULT 0'],
   ['telegram_groups', 'lock_hash', 'TEXT'],
+  ['login_sessions', 'private_until', 'TEXT'],
   ['telegram_topics', 'color', 'TEXT'],
 ]) {
   if (!columnsOf(table).some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
