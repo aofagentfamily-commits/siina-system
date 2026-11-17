@@ -641,18 +641,30 @@ async function pollBot(bot) {
     processUpdate(bot, up);
     if (up.update_id > maxId) maxId = up.update_id;
   }
-  if (maxId !== bot.update_offset) {
-    db.prepare('UPDATE telegram_bots SET update_offset = ?, status = ?, last_error = NULL WHERE id = ?').run(maxId, 'connected', bot.id);
-  }
+  // Every good poll clears the error, even when no new message arrived.
+  db.prepare('UPDATE telegram_bots SET update_offset = ?, status = ?, last_error = NULL WHERE id = ?').run(maxId, 'connected', bot.id);
   return updates.length;
 }
+
+// Network blips (slow replies, dropped connections) are common. Only a run of failed polls is shown as an error;
+// other errors (for example a wrong token) are shown at once.
+const POLL_ERROR_AFTER = 3;
+const pollFailures = new Map(); // bot id -> failed polls in a row
 
 async function pollAll() {
   const bots = db.prepare("SELECT * FROM telegram_bots WHERE mode = 'polling' AND status != 'disabled'").all();
   for (const bot of bots) {
     try {
       await pollBot(bot);
+      pollFailures.delete(bot.id);
     } catch (err) {
+      const transient = err instanceof TelegramError && err.code === 'NETWORK';
+      const count = (pollFailures.get(bot.id) || 0) + 1;
+      pollFailures.set(bot.id, count);
+      if (transient && count < POLL_ERROR_AFTER) continue;
+      if (bot.status !== 'error' || bot.last_error !== err.message) {
+        u.logError(`${bot.name}: ${err.message}`, 'telegram.poll');
+      }
       db.prepare('UPDATE telegram_bots SET status = ?, last_error = ? WHERE id = ?').run('error', err.message, bot.id);
     }
   }
