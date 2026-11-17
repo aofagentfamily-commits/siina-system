@@ -41,12 +41,12 @@ function tgGroupCard(g) {
         <p>Chat ID</p>
         <p class="tgg-id">${esc(g.chatId)}</p>
       </div>
-      <div class="tgg-switches">${tgGroupLockSwitch(g)}<label class="switch" title="เปิด / ปิดการติดตาม"><input type="checkbox" data-change="tg-group-toggle" data-id="${esc(g.id)}" ${g.enabled ? 'checked' : ''}><span></span></label></div>
+      ${tgGroupLockSwitch(g)}
     </header>
     <dl class="tgg-meta">
       <dt>บอทที่เชื่อมต่อ</dt><dd>${unlinked ? '<span class="tgg-muted">ยังไม่ได้เชื่อมต่อบอท</span>' : esc(g.botName)}</dd>
       <dt>สถานะ</dt><dd><span class="tgg-pill ${st[1]}">${esc(st[0])}</span></dd>
-      <dt>การติดตาม</dt><dd>${g.enabled ? 'เปิดอยู่' : 'ปิดอยู่'}</dd>
+      <dt>การติดตาม</dt><dd class="tgg-track-row"><label class="switch" title="เปิด = รับและบันทึกข้อความจากกลุ่มนี้ / ปิด = ไม่รับข้อความ"><input type="checkbox" data-change="tg-group-toggle" data-id="${esc(g.id)}" ${g.enabled ? 'checked' : ''}><span></span></label> <span>${g.enabled ? 'เปิดอยู่' : 'ปิดอยู่'}</span></dd>
       <dt>ตอบรับอัตโนมัติ</dt><dd>${g.autoReply ? 'เปิด' : 'ปิด'}</dd>
       <dt>การล็อกห้อง</dt><dd>${g.locked ? '🔒 ล็อกอยู่' : '🔓 ไม่ได้ล็อก'}</dd>
     </dl>

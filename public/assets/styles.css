@@ -1445,3 +1445,5 @@ body[data-route="calendar"] .modal .btn.primary { color: #FFFFFF; }
   .sum-name { font-size: 17px; }
   .sum-text { font-size: 15px; }
 }
+
+.tgg-track-row { display: flex; align-items: center; gap: 8px; }
