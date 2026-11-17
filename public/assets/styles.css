@@ -1448,11 +1448,10 @@ body[data-route="calendar"] .modal .btn.primary { color: #FFFFFF; }
 
 .tgg-track-row { display: flex; align-items: center; gap: 8px; }
 
-/* padlock button next to the tracking switch on each group card */
-.tgg-lockbtn {
-  width: 36px; height: 36px; border-radius: 50%; display: inline-grid; place-items: center; flex: none; padding: 0; cursor: pointer;
-  background: #5A3A5F; color: #FFFFFF; border: 1.5px solid #3B82F6; transition: background .2s ease, transform .15s ease;
-}
-.tgg-lockbtn:hover { transform: translateY(-1px); }
-.tgg-lockbtn .ic { width: 16px; height: 16px; }
-.tgg-lockbtn.is-on { background: #FF5AA5; border-color: #3B82F6; box-shadow: 0 0 12px rgba(255, 90, 165, .5); }
+/* padlock icon, top-right of each group card: rainbow + glow when locked, plain open lock when not */
+.tgg-lockbtn { position: relative; margin-left: auto; align-self: flex-start; flex: none; width: 38px; height: 38px; padding: 0; display: grid; place-items: center; background: none; border: 0; cursor: pointer; }
+.tgg-lockbtn svg { width: 32px; height: 32px; overflow: visible; }
+.tgg-lockbtn.is-locked svg { filter: drop-shadow(0 0 5px rgba(255, 120, 200, .75)) drop-shadow(0 0 9px rgba(120, 180, 255, .45)); }
+.tgg-lockbtn:hover svg { transform: scale(1.08); }
+.tgg-lockbtn svg { transition: transform .15s ease; }
+.tgg-lockbtn:focus-visible { outline: 2px solid #FFFFFF; outline-offset: 3px; border-radius: 10px; }

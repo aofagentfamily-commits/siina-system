@@ -41,11 +41,12 @@ function tgGroupCard(g) {
         <p>Chat ID</p>
         <p class="tgg-id">${esc(g.chatId)}</p>
       </div>
+      ${tgGroupLockSwitch(g)}
     </header>
     <dl class="tgg-meta">
       <dt>บอทที่เชื่อมต่อ</dt><dd>${unlinked ? '<span class="tgg-muted">ยังไม่ได้เชื่อมต่อบอท</span>' : esc(g.botName)}</dd>
       <dt>สถานะ</dt><dd><span class="tgg-pill ${st[1]}">${esc(st[0])}</span></dd>
-      <dt>การติดตาม</dt><dd class="tgg-track-row"><label class="switch" title="เปิด = รับและบันทึกข้อความจากกลุ่มนี้ / ปิด = ไม่รับข้อความ"><input type="checkbox" data-change="tg-group-toggle" data-id="${esc(g.id)}" ${g.enabled ? 'checked' : ''}><span></span></label> <span>${g.enabled ? 'เปิดอยู่' : 'ปิดอยู่'}</span> ${tgGroupLockSwitch(g)}</dd>
+      <dt>การติดตาม</dt><dd class="tgg-track-row"><label class="switch" title="เปิด = รับและบันทึกข้อความจากกลุ่มนี้ / ปิด = ไม่รับข้อความ"><input type="checkbox" data-change="tg-group-toggle" data-id="${esc(g.id)}" ${g.enabled ? 'checked' : ''}><span></span></label> <span>${g.enabled ? 'เปิดอยู่' : 'ปิดอยู่'}</span></dd>
       <dt>ตอบรับอัตโนมัติ</dt><dd>${g.autoReply ? 'เปิด' : 'ปิด'}</dd>
       <dt>การล็อกห้อง</dt><dd>${g.locked ? '🔒 ล็อกอยู่' : '🔓 ไม่ได้ล็อก'}</dd>
     </dl>
@@ -314,10 +315,20 @@ document.addEventListener('paste', (e) => {
 });
 
 // ---------------------------------------------------------------- room lock: switch, popup section, PIN rules
+// Padlock icon in the card's top-right corner. Closed + rainbow = locked; open + plain = not locked.
+const TGG_LOCKED_PATH = 'M7 11V8a5 5 0 0 1 10 0v3 M6 11h12v9H6z';
+const TGG_OPEN_PATH = 'M7 11V7a5 5 0 0 1 9.9-1 M6 11h12v9H6z';
 function tgGroupLockSwitch(g) {
-  return `<button type="button" class="tgg-lockbtn ${g.locked ? 'is-on' : ''}" data-action="tg-group-lock" data-id="${esc(g.id)}"
-    aria-label="${g.locked ? 'ห้องถูกล็อก กดเพื่อปิดการล็อก' : 'กดเพื่อล็อกห้องแชทด้วยรหัส 6 หลัก'}"
-    aria-pressed="${g.locked ? 'true' : 'false'}" title="${g.locked ? 'ล็อกอยู่ กดเพื่อปิดการล็อก' : 'ล็อกห้องแชทด้วยรหัส 6 หลัก'}">${icon('lock', 'sm')}</button>`;
+  const locked = !!g.locked;
+  const label = locked ? 'ห้องนี้ล็อกอยู่' : 'ห้องนี้ไม่ได้ล็อก';
+  const svg = locked
+    ? `<svg viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="tggRainbow" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#FF3B5C"/><stop offset=".2" stop-color="#FF8A3D"/><stop offset=".4" stop-color="#FFE14D"/>
+        <stop offset=".6" stop-color="#3DDC84"/><stop offset=".8" stop-color="#3AA8FF"/><stop offset="1" stop-color="#A65CFF"/></linearGradient></defs>
+        <path d="${TGG_LOCKED_PATH}" fill="none" stroke="url(#tggRainbow)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    : `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${TGG_OPEN_PATH}" fill="none" stroke="#E4DCEB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  return `<button type="button" class="tgg-lockbtn ${locked ? 'is-locked' : ''}" data-action="tg-group-lock" data-id="${esc(g.id)}"
+    aria-label="${label}. กดเพื่อ${locked ? 'เปลี่ยนรหัสหรือปิดการล็อก' : 'ตั้งรหัสล็อกห้อง'}" title="${label}">${svg}</button>`;
 }
 
 function tggPinField(name, label) {
