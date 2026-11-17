@@ -458,10 +458,44 @@ function renameTopic(user, groupId, threadId, name) {
   return { ok: true, name: clean };
 }
 
+// Pastel colours for topic pills. The colour is a display setting inside SIINA SYSTEM only (never sent to Telegram).
+const TOPIC_COLORS = ['#B8CEFF', '#B5E6FF', '#C5EBD3', '#DEC8FF', '#FFD5B5', '#FFF0AD', '#FFC5DE', '#FFFFFF'];
+
 function groupTopics(user, groupId) {
   getGroup(user, groupId);
-  return db.prepare('SELECT thread_id, name FROM telegram_topics WHERE group_id = ? AND user_id = ? ORDER BY thread_id')
-    .all(groupId, user.id).map((t) => ({ threadId: t.thread_id, name: t.name }));
+  return db.prepare('SELECT thread_id, name, color FROM telegram_topics WHERE group_id = ? AND user_id = ? ORDER BY thread_id')
+    .all(groupId, user.id).map((t) => ({ threadId: t.thread_id, name: t.name, color: t.color || null }));
+}
+
+// Sets the display colour of one topic. Rows are keyed by group + Telegram topic id, so renaming never changes the id.
+function setTopicColor(user, groupId, threadId, color) {
+  getGroup(user, groupId);
+  const tid = u.int(threadId, { min: 2, field: 'หัวข้อ' });
+  if (!TOPIC_COLORS.includes(color)) throw new u.HttpError(400, 'สีหัวข้อไม่ถูกต้อง', 'VALIDATION');
+  upsertTopic(user.id, groupId, tid, null, false); // make sure the row exists; an existing name is kept
+  db.prepare('UPDATE telegram_topics SET color = ?, updated_at = ? WHERE group_id = ? AND user_id = ? AND thread_id = ?')
+    .run(color, u.nowIso(), groupId, user.id, tid);
+  return { ok: true, threadId: tid, color };
+}
+
+// Creates a real forum topic in the Telegram group. The bot must be an admin with the "manage topics" right.
+async function createTopic(user, groupId, name, color) {
+  const g = getGroup(user, groupId);
+  const clean = u.str(name, { max: 120, required: true, field: 'ชื่อหัวข้อ' });
+  if (color != null && !TOPIC_COLORS.includes(color)) throw new u.HttpError(400, 'สีหัวข้อไม่ถูกต้อง', 'VALIDATION');
+  if (!g.bot_id) throw new u.HttpError(400, 'ยังไม่ได้เชื่อมต่อบอท กรุณาเลือกบอทก่อน', 'VALIDATION');
+  const bot = getBot(user, g.bot_id);
+  let created;
+  try {
+    created = await callApi(botToken(bot), 'createForumTopic', { chat_id: g.chat_id, name: clean });
+  } catch (err) {
+    throw new u.HttpError(400, 'สร้างหัวข้อใน Telegram ไม่สำเร็จ บอทต้องเป็นแอดมินที่มีสิทธิ์จัดการหัวข้อ: ' + err.message, 'TELEGRAM');
+  }
+  const tid = created.message_thread_id;
+  upsertTopic(user.id, groupId, tid, clean, true);
+  if (color) setTopicColor(user, groupId, tid, color);
+  u.activity(user.id, 'create', 'telegram_topic', String(tid), clean);
+  return { ok: true, threadId: tid, name: clean, color: color || null };
 }
 
 // Store one incoming message for every enabled group that matches this bot and chat.
@@ -942,7 +976,7 @@ module.exports = {
   listGroups, createGroup, updateGroup, deleteGroup, testGroup,
   processUpdate, pollAll, chatList, groupMessages, mentionList, markGroupRead, mediaFile,
   sendMessage, retryOutbox, outboxForGroup,
-  listFilters, createFilter, updateFilter, deleteFilter, groupTopics, renameTopic, ackMessage, setGroupTags,
+  listFilters, createFilter, updateFilter, deleteFilter, groupTopics, renameTopic, setTopicColor, createTopic, ackMessage, setGroupTags,
   overview, autoReplyCheck, listLogs, subscribe, sendFile, sendSticker,
   getWebhookBot: (id) => db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(id),
   publicBaseUrl,

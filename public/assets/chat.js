@@ -21,16 +21,23 @@ function topicName(threadId) {
 function topicOf(m) {
   return m.threadId == null ? 1 : m.threadId;
 }
+// Pastel colours for topic pills (display only, stored per topic in SIINA SYSTEM).
+const TOPIC_PALETTE = [['#B8CEFF', 'น้ำเงินพาสเทล'], ['#B5E6FF', 'ฟ้าพาสเทล'], ['#C5EBD3', 'เขียวมิ้นต์'], ['#DEC8FF', 'ม่วงลาเวนเดอร์'],
+  ['#FFD5B5', 'ส้มพีช'], ['#FFF0AD', 'เหลืองครีม'], ['#FFC5DE', 'ชมพูพาสเทล'], ['#FFFFFF', 'ขาว']];
+
+// The pill row is always shown: "ทั้งหมด", one pill per topic, and "+ ตั้งหัวข้อ" at the end.
 function topicRowHtml() {
-  if (!S.chat.topics.length) return '';
-  const items = [['all', 'ทั้งหมด', '', '']].concat(S.chat.topics.map((t) => [String(t.threadId), t.name === 'General' ? 'ทั่วไป' : t.name, t.threadId, t.name]));
-  const unnamed = (name) => /^หัวข้อ #/.test(name);
-  return `<nav class="cv-topics" aria-label="หัวข้อในกลุ่ม">${items.map(([k, l, thread, raw]) => {
-    const canRename = k !== 'all' && k !== '1';
-    return `<button class="cv-topic-chip ${canRename && unnamed(raw) ? 'needs-name' : ''}" aria-selected="${S.chat.topic === k}"
-      data-action="chat-topic" data-id="${esc(k)}" data-thread="${esc(thread)}" data-name="${esc(raw)}"
-      title="${canRename ? 'กดอีกครั้งเมื่อเลือกอยู่เพื่อแก้ชื่อหัวข้อ' : ''}">${icon('chat', 'sm')} ${esc(l)}${canRename && unnamed(raw) ? ' · ตั้งชื่อ' : ''}</button>`;
-  }).join('')}</nav>`;
+  const all = `<button class="cv-topic-chip is-all" aria-selected="${S.chat.topic === 'all'}" data-action="chat-topic"
+    data-id="all" data-thread="" data-name="" data-color="">ทั้งหมด</button>`;
+  const pills = S.chat.topics.map((t) => {
+    const key = String(t.threadId);
+    const label = t.threadId === 1 || t.name === 'General' ? 'ทั่วไป' : t.name;
+    return `<button class="cv-topic-chip" style="--tc:${esc(t.color || '#FFFFFF')}" aria-selected="${S.chat.topic === key}"
+      data-action="chat-topic" data-id="${esc(key)}" data-thread="${esc(t.threadId)}" data-name="${esc(t.name)}"
+      data-color="${esc(t.color || '')}" title="${esc(label)}">${esc(label)}</button>`;
+  }).join('');
+  const add = `<button class="cv-topic-add" data-action="chat-topic-new">+ ตั้งหัวข้อ</button>`;
+  return `<nav class="cv-topics" aria-label="หัวข้อในกลุ่ม">${all}${pills}${add}</nav>`;
 }
 function topicHintHtml() {
   if (!S.chat.topics.length) return '';
@@ -423,7 +430,7 @@ ACTIONS['chat-reply'] = (el) => {
   if (input) input.focus();
 };
 ACTIONS['chat-topic'] = (el) => {
-  // A second tap on the topic that is already selected opens the rename popup.
+  // A second tap on the topic that is already selected opens its settings popup.
   if (el.getAttribute('aria-selected') === 'true' && el.dataset.id !== 'all' && el.dataset.id !== '1') {
     ACTIONS['chat-topic-rename'](el);
     return;
@@ -436,28 +443,74 @@ ACTIONS['chat-topic'] = (el) => {
   const box = $('#messages');
   if (box) { box.innerHTML = messagesHtml(); bindMessageArea(); }
 };
-ACTIONS['chat-topic-rename'] = (el) => {
-  const threadId = el.dataset.thread;
-  const current = el.dataset.name.startsWith('หัวข้อ #') ? '' : el.dataset.name;
+// Popup for a new topic or for editing one (name and colour). Colour changes never need a new name.
+function topicFormOpen({ threadId, name, color }) {
+  const isNew = !threadId;
+  const picked = TOPIC_PALETTE.some(([c]) => c === color) ? color : TOPIC_PALETTE[0][0];
   openModal({
-    title: 'ตั้งชื่อหัวข้อ',
-    body: `<form data-form="chat-topic-rename" data-group="${esc(S.chat.groupId)}" data-thread="${esc(threadId)}" class="stack">
-      <p class="muted small">Telegram ไม่ได้ส่งชื่อหัวข้อนี้มาให้ระบบ จึงตั้งชื่อเองได้ที่นี่ (ชื่อในแอปเท่านั้น ไม่เปลี่ยนชื่อใน Telegram)</p>
-      <label class="field"><span>ชื่อหัวข้อ</span><input class="input" name="name" maxlength="120" required value="${esc(current)}" placeholder="เช่น HR999"></label>
+    title: isNew ? 'ตั้งหัวข้อใหม่' : 'แก้ไขหัวข้อ',
+    body: `<form data-form="chat-topic-form" data-group="${esc(S.chat.groupId)}" data-thread="${esc(threadId || '')}"
+      data-name="${esc(name || '')}" class="stack">
+      <p class="muted small">${isNew
+        ? 'สร้างหัวข้อจริงในกลุ่ม Telegram ได้ ถ้าบอทเป็นแอดมินที่มีสิทธิ์จัดการหัวข้อ'
+        : 'สีเป็นการแสดงผลในแอปนี้เท่านั้น ไม่เปลี่ยนสีในแอป Telegram'}</p>
+      <label class="field"><span>ชื่อหัวข้อ</span><input class="input" name="name" maxlength="120" ${isNew ? 'required' : ''}
+        value="${esc(name || '')}" placeholder="เช่น HR999"></label>
+      <div class="field"><span>สีพื้นหลัง</span>
+        <div class="tp-swatches" role="radiogroup" aria-label="เลือกสีหัวข้อ">
+          ${TOPIC_PALETTE.map(([c, n]) => `<button type="button" class="tp-sw" role="radio" aria-checked="${c === picked}"
+            data-color="${c}" style="--sw:${c}" aria-label="${n}" title="${n}"></button>`).join('')}
+        </div>
+        <input type="hidden" name="color" value="${picked}">
+      </div>
+      <div class="tp-preview-row"><small class="muted">ตัวอย่าง</small>
+        <span class="cv-topic-chip tp-preview" id="tpPreview" style="--tc:${picked}">${esc(name || 'หัวข้อใหม่')}</span></div>
       <p class="small" data-role="form-error"></p>
       <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-action="close-modal">ยกเลิก</button>
-        <button type="submit" class="btn primary">บันทึกชื่อ</button></div>
+        <button type="submit" class="btn primary">บันทึก</button></div>
     </form>`,
+    onMount: (modal) => {
+      const form = modal.querySelector('form[data-form="chat-topic-form"]');
+      const input = form.querySelector('[name="name"]');
+      const hidden = form.querySelector('[name="color"]');
+      const preview = form.querySelector('#tpPreview');
+      input.addEventListener('input', () => { preview.textContent = input.value.trim() || 'หัวข้อใหม่'; });
+      form.querySelectorAll('.tp-sw').forEach((btn) => btn.addEventListener('click', () => {
+        hidden.value = btn.dataset.color;
+        form.querySelectorAll('.tp-sw').forEach((b) => b.setAttribute('aria-checked', String(b === btn)));
+        preview.style.setProperty('--tc', btn.dataset.color);
+      }));
+    },
   });
-};
-FORMS['chat-topic-rename'] = async (form) => {
+}
+ACTIONS['chat-topic-new'] = () => topicFormOpen({});
+ACTIONS['chat-topic-rename'] = (el) => topicFormOpen({
+  threadId: el.dataset.thread,
+  name: el.dataset.name.startsWith('หัวข้อ #') ? '' : el.dataset.name,
+  color: el.dataset.color,
+});
+FORMS['chat-topic-form'] = async (form) => {
   const name = form.querySelector('[name="name"]').value.trim();
+  const color = form.querySelector('[name="color"]').value;
+  const threadId = form.dataset.thread;
+  const gid = form.dataset.group;
   const btn = form.querySelector('[type="submit"]');
   try {
-    await busy(btn, () => apiPatch(`/api/telegram/groups/${form.dataset.group}/topics/${form.dataset.thread}`, { name }));
+    if (!threadId) {
+      const created = await busy(btn, () => apiPost(`/api/telegram/groups/${gid}/topics`, { name, color }));
+      S.chat.topic = String(created.threadId);
+      toast('สร้างหัวข้อใน Telegram แล้ว');
+    } else {
+      await busy(btn, async () => {
+        if (name && name !== form.dataset.name) {
+          await apiPatch(`/api/telegram/groups/${gid}/topics/${threadId}`, { name });
+        }
+        await apiPut(`/api/telegram/groups/${gid}/topics/${threadId}/color`, { color });
+      });
+      toast('บันทึกหัวข้อแล้ว');
+    }
     closeAllModals();
-    toast('บันทึกชื่อหัวข้อแล้ว');
-    renderChat({ group: S.chat.groupId });
+    renderChat({ group: gid });
   } catch (err) { setFormError(form, err.message); }
 };
 ACTIONS['chat-clear-reply'] = () => {

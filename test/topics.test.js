@@ -31,7 +31,7 @@ const msg = (id, extra) => ({ update_id: id, message: { message_id: id, date: ba
 test('topic created notice names the topic and is not stored as a message', () => {
   tg.processUpdate(bot, msg(1, { message_thread_id: 5, forum_topic_created: { name: 'HR999' } }));
   const topics = tg.groupTopics(user, 'g-topics');
-  assert.deepEqual(topics, [{ threadId: 5, name: 'HR999' }]);
+  assert.deepEqual(topics, [{ threadId: 5, name: 'HR999', color: null }]);
   assert.equal(db.prepare('SELECT COUNT(*) AS c FROM telegram_messages WHERE group_id = ?').get('g-topics').c, 0);
   assert.equal(db.prepare("SELECT is_forum FROM telegram_groups WHERE id = 'g-topics'").get().is_forum, 1);
 });
@@ -74,4 +74,15 @@ test('a reply with a thread id in an ordinary group does not create a topic', ()
   assert.deepEqual(tg.groupTopics(user, 'g-plain'), []);
   assert.equal(db.prepare("SELECT is_forum FROM telegram_groups WHERE id = 'g-plain'").get().is_forum, 0);
   assert.ok(plain);
+});
+
+test('topic colour is saved per topic, survives a rename, and rejects unknown colours', () => {
+  tg.setTopicColor(user, 'g-topics', 5, '#B8CEFF');
+  tg.setTopicColor(user, 'g-topics', 9, '#FFF0AD');
+  tg.processUpdate(bot, msg(40, { message_thread_id: 5, forum_topic_edited: { name: 'HR2000' } }));
+  const topics = tg.groupTopics(user, 'g-topics');
+  assert.equal(topics.find((t) => t.threadId === 5).color, '#B8CEFF');
+  assert.equal(topics.find((t) => t.threadId === 5).name, 'HR2000');
+  assert.equal(topics.find((t) => t.threadId === 9).color, '#FFF0AD');
+  assert.throws(() => tg.setTopicColor(user, 'g-topics', 5, '#000000'), /สีหัวข้อไม่ถูกต้อง/);
 });
