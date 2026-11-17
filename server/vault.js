@@ -7,6 +7,14 @@ const u = require('./util');
 
 const MAX_ITEMS = 1000;
 const MAX_CATEGORIES = 20;
+const AVATAR_MAX = 300 * 1024; // characters of the picture data URL (about 220 KB)
+function avatarClean(value) {
+  if (value === null || value === '') return null;
+  const s = String(value);
+  if (!/^data:image\/(png|jpeg|webp);base64,/.test(s)) throw new u.HttpError(400, 'รูปต้องเป็น PNG, JPG หรือ WebP', 'VALIDATION');
+  if (s.length > AVATAR_MAX) throw new u.HttpError(400, 'รูปใหญ่เกินไป กรุณาเลือกรูปที่เล็กลง', 'TOO_LARGE');
+  return s;
+}
 const COLORS = ['#FFD1E5', '#E4D4FF', '#C5EBD3', '#FFF0AD', '#B5E6FF', '#FFD5B5', '#FFC5DE', '#D8DEFF'];
 
 function catRow(user, id) {
@@ -29,6 +37,7 @@ function itemDto(r, reveal = false) {
     url: r.url || '',
     note: r.note || '',
     categoryId: r.category_id || null,
+    avatarData: r.avatar_data || null,
     starred: !!r.starred,
     hasPassword: !!r.secret_enc,
     password: reveal && r.secret_enc ? u.decrypt(r.secret_enc) : undefined,
@@ -74,9 +83,9 @@ function createItem(user, body = {}) {
   const password = u.str(body.password, { max: 500, field: 'รหัสผ่าน' });
   const id = u.uid();
   const now = u.nowIso();
-  db.prepare(`INSERT INTO vault_items (id, user_id, category_id, title, login, url, note, secret_enc, starred, created_at, updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(id, user.id, f.categoryId, f.title, f.login, f.url, f.note,
-    password ? u.encrypt(password) : null, u.bool(body.starred) ? 1 : 0, now, now);
+  db.prepare(`INSERT INTO vault_items (id, user_id, category_id, title, login, url, note, secret_enc, starred, avatar_data, created_at, updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, user.id, f.categoryId, f.title, f.login, f.url, f.note,
+    password ? u.encrypt(password) : null, u.bool(body.starred) ? 1 : 0, avatarClean(body.avatarData || null), now, now);
   u.activity(user.id, 'create', 'vault_item', id, '');
   return getItem(user, id, false);
 }
@@ -91,8 +100,10 @@ function updateItem(user, id, body = {}) {
     secret = pw ? u.encrypt(pw) : null; // an empty field clears the password; leaving it out keeps it
   }
   const starred = body.starred != null ? (u.bool(body.starred) ? 1 : 0) : row.starred;
-  db.prepare(`UPDATE vault_items SET category_id = ?, title = ?, login = ?, url = ?, note = ?, secret_enc = ?, starred = ?, updated_at = ?
-    WHERE id = ? AND user_id = ?`).run(f.categoryId, f.title, f.login, f.url, f.note, secret, starred, u.nowIso(), row.id, user.id);
+  // the picture: leaving it out keeps it; null removes it
+  const avatar = body.avatarData !== undefined ? avatarClean(body.avatarData) : row.avatar_data;
+  db.prepare(`UPDATE vault_items SET category_id = ?, title = ?, login = ?, url = ?, note = ?, secret_enc = ?, starred = ?, avatar_data = ?, updated_at = ?
+    WHERE id = ? AND user_id = ?`).run(f.categoryId, f.title, f.login, f.url, f.note, secret, starred, avatar, u.nowIso(), row.id, user.id);
   u.activity(user.id, 'update', 'vault_item', row.id, '');
   return getItem(user, row.id, false);
 }

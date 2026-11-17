@@ -414,6 +414,7 @@ for (const [table, col, def] of [
   ['telegram_groups', 'is_forum', 'INTEGER NOT NULL DEFAULT 0'],
   ['telegram_groups', 'lock_hash', 'TEXT'],
   ['login_sessions', 'private_until', 'TEXT'],
+  ['vault_items', 'avatar_data', 'TEXT'],
   ['telegram_topics', 'color', 'TEXT'],
 ]) {
   if (!columnsOf(table).some((c) => c.name === col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
