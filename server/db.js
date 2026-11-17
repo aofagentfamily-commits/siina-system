@@ -235,6 +235,14 @@ CREATE TABLE IF NOT EXISTS notes (
 );
 CREATE INDEX IF NOT EXISTS idx_notes_user ON notes(user_id, updated_at);
 
+-- My Desktop: one saved layout per account (icons, widgets, dock, wallpaper) and the quick-note pointer.
+CREATE TABLE IF NOT EXISTS desktop_layouts (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  layout TEXT,
+  quick_note_id TEXT,
+  updated_at TEXT NOT NULL
+);
+
 -- High-water marks left by "clear history": stored messages up to upto_message_id are never stored again.
 CREATE TABLE IF NOT EXISTS telegram_history_marks (
   id TEXT PRIMARY KEY,

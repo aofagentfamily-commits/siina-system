@@ -11,6 +11,7 @@ const vault = require('./vault');
 const live = require('./live');
 const themes = require('./themes');
 const categories = require('./categories');
+const desktop = require('./desktop');
 const tpl = require('./templates');
 const { db } = require('./db');
 const u = require('./util');
@@ -89,6 +90,13 @@ add('POST', '/api/notes', (c) => notes.createNote(c.user, c.body));
 add('GET', '/api/notes/:id', (c) => notes.getNote(c.user, c.params.id, c.query.reveal === '1'));
 add('PATCH', '/api/notes/:id', (c) => notes.updateNote(c.user, c.params.id, c.body));
 add('DELETE', '/api/notes/:id', (c) => notes.deleteNote(c.user, c.params.id));
+
+// ---------------------------------------------------------------- My Desktop (layout saved per account)
+add('GET', '/api/desktop', (c) => desktop.getDesktop(c.user));
+add('PUT', '/api/desktop', (c) => desktop.saveDesktop(c.user, c.body));
+add('DELETE', '/api/desktop', (c) => desktop.resetDesktop(c.user));
+add('PUT', '/api/desktop/quick-note', (c) => desktop.setQuickNote(c.user, c.body.noteId == null ? null : c.body.noteId));
+add('GET', '/api/desktop/progress', (c) => desktop.projectProgress(c.user));
 add('GET', '/api/notifications', (c) => ({ items: f.listNotifications(c.user, c.query) }));
 add('POST', '/api/notifications/read-all', (c) => f.markAllNotificationsRead(c.user));
 add('POST', '/api/notifications/:id/read', (c) => f.markNotificationRead(c.user, c.params.id));

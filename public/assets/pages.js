@@ -5,7 +5,7 @@ const ACTIONS = {};   // data-action="name" click handlers
 const FORMS = {};     // <form data-form="name"> submit handlers
 const CHANGES = {};   // data-change="name" change handlers
 const PAGE_TITLES = {
-  home: 'หน้าแรก', chat: 'ห้องแชท', projects: 'โปรเจ็กต์', calendar: 'ปฏิทิน', summary: 'สรุปสำคัญ', settings: 'ตั้งค่า',
+  home: 'หน้าแรก', desktop: 'My Desktop', chat: 'ห้องแชท', projects: 'โปรเจ็กต์', calendar: 'ปฏิทิน', summary: 'สรุปสำคัญ', settings: 'ตั้งค่า',
 };
 const SUM_CATEGORY = { all: 'ทั้งหมด', urgent: 'เร่งด่วน', reply: 'ต้องตอบ', assigned: 'งานที่ได้รับมอบหมาย', info: 'เรื่องแจ้งให้ทราบ', follow: 'ติดตามภายหลัง', done: 'เสร็จแล้ว' };
 const SUM_STATE = { open: ['ยังไม่ดำเนินการ', ''], read: ['อ่านแล้ว', 'ok'], follow: ['ติดตามภายหลัง', 'purple'], done: ['เสร็จสิ้น', 'ok'] };

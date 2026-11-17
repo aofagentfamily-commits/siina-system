@@ -1,0 +1,532 @@
+/* SIINA SYSTEM — My Desktop styles. Scoped to .dsk so the rest of the app keeps its own look. */
+
+.dsk {
+  --dsk-ink: #3d2a4f;
+  --dsk-muted: #8a7a98;
+  --dsk-plum: #7c4fb5;
+  position: relative;
+  min-height: calc(100vh - 150px);
+  padding: 22px 26px 40px;
+  border-radius: 28px;
+  overflow: hidden;
+  isolation: isolate;
+  color: var(--dsk-ink);
+}
+
+/* ---------------------------------------------------------------- wallpaper and decoration */
+.dsk-wall {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(55% 40% at 78% 88%, #ffd9c4 0%, rgba(255, 217, 196, 0) 70%),
+    radial-gradient(50% 40% at 12% 18%, #ffc6e1 0%, rgba(255, 198, 225, 0) 70%),
+    linear-gradient(180deg, #ffd3ea 0%, #f1c0ea 34%, #d8b6f4 64%, #ffd8c3 100%);
+  background-size: cover;
+  background-position: center;
+}
+.dsk-wall.is-photo { background-color: #f6dbe9; }
+
+.dsk-deco { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.dsk-moon {
+  position: absolute;
+  top: 9%;
+  left: 47%;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #fff4d6;
+  box-shadow: inset -12px -3px 0 0 #f7cde6;
+}
+.dsk-star {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: radial-gradient(circle, #fff 30%, rgba(255, 255, 255, 0) 70%);
+  animation: dskTwinkle 3.2s ease-in-out infinite;
+}
+.dsk-star.s1 { top: 14%; left: 42%; }
+.dsk-star.s2 { top: 26%; left: 58%; animation-delay: 0.8s; }
+.dsk-star.s3 { top: 6%; left: 74%; animation-delay: 1.6s; }
+.dsk-star.s4 { top: 42%; left: 36%; animation-delay: 2.2s; }
+.dsk-cloud {
+  position: absolute;
+  bottom: -40px;
+  width: 360px;
+  height: 130px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  filter: blur(3px);
+  animation: dskFloat 14s ease-in-out infinite alternate;
+}
+.dsk-cloud.c1 { left: -70px; }
+.dsk-cloud.c2 { right: -90px; bottom: -60px; width: 420px; animation-delay: 3s; }
+.dsk-mascot {
+  position: absolute;
+  left: 22px;
+  bottom: 100px;
+  width: 104px;
+  height: auto;
+  z-index: 0;
+  pointer-events: none;
+  animation: dskBob 4.5s ease-in-out infinite;
+}
+
+/* ---------------------------------------------------------------- header */
+.dsk-top { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.dsk-title h2 { margin: 0; font-size: 28px; color: var(--dsk-ink); letter-spacing: 0.2px; }
+.dsk-title p { margin: 4px 0 0; color: var(--dsk-muted); font-size: 14px; }
+.dsk-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.dsk-customize {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 20px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(90deg, #ff7fb0, #b58cf5);
+  box-shadow: 0 8px 20px rgba(181, 140, 245, 0.35);
+  cursor: pointer;
+}
+.dsk-round {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 0;
+  display: grid;
+  place-items: center;
+  color: var(--dsk-plum);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 4px 14px rgba(120, 60, 160, 0.15);
+  cursor: pointer;
+}
+.dsk-round:hover, .dsk-customize:hover { transform: translateY(-1px); }
+
+/* ---------------------------------------------------------------- edit mode bar */
+.dsk-editbar {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 14px 0 6px;
+  padding: 10px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.dsk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(181, 140, 245, 0.45);
+  background: #fff;
+  color: #6b3fa0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.dsk-chip.primary { background: linear-gradient(90deg, #ff7fb0, #b58cf5); color: #fff; border: 0; }
+.dsk-chip.ghost { background: transparent; }
+.dsk-toggle input { accent-color: #b58cf5; }
+.dsk-status { margin-inline-start: auto; font-size: 12px; color: var(--dsk-muted); }
+.dsk-status.is-dirty { color: #c2185b; font-weight: 600; }
+
+/* ---------------------------------------------------------------- body: icons on the left, widgets on the right */
+.dsk-body {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+  margin-top: 16px;
+}
+.dsk-apps {
+  display: grid;
+  grid-auto-rows: 118px;
+  min-height: 236px;
+  align-content: start;
+  row-gap: 0;
+}
+.dsk-app { position: relative; display: flex; justify-content: center; min-width: 0; }
+.dsk-app.is-drag { z-index: 5; opacity: 0.92; pointer-events: none; }
+.dsk-app-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsk-ink);
+  font: inherit;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+.dsk-app-btn:hover { transform: scale(1.08); }
+.dsk-app-ic {
+  width: 70px;
+  height: 70px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: linear-gradient(160deg, #fff, #ffe9f4);
+  box-shadow: 0 8px 18px rgba(170, 90, 150, 0.18), inset 0 1px 0 #fff;
+}
+.dsk-app-ic svg { width: 30px; height: 30px; }
+.dsk-app-ic img { width: 100%; height: 100%; object-fit: cover; }
+.dsk-app-ic.tone-pink { background: linear-gradient(160deg, #fff, #ffd6e8); color: #e0488a; }
+.dsk-app-ic.tone-lilac { background: linear-gradient(160deg, #fff, #eadcff); color: #9b59d0; }
+.dsk-app-ic.tone-peach { background: linear-gradient(160deg, #fff, #ffe3d3); color: #e8875a; }
+.dsk-app-ic.tone-mint { background: linear-gradient(160deg, #fff, #d9f6ea); color: #2fa57a; }
+.dsk-app-ic.tone-sky { background: linear-gradient(160deg, #fff, #dcefff); color: #3f86d6; }
+.dsk-app-ic.tone-butter { background: linear-gradient(160deg, #fff, #fff1c4); color: #c79020; }
+.dsk-app-name {
+  max-width: 100px;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 0 #fff;
+}
+.dsk-slot {
+  justify-self: center;
+  align-self: start;
+  width: 70px;
+  height: 70px;
+  margin-top: 0;
+  border: 2px dashed rgba(181, 140, 245, 0.5);
+  border-radius: 20px;
+}
+.dsk-slot.is-target { background: rgba(255, 127, 176, 0.25); border-color: #ff7fb0; }
+.dsk.is-edit .dsk-app-btn { cursor: grab; }
+.dsk.is-edit .dsk-app { touch-action: none; }
+.dsk.is-edit .dsk-app-ic { animation: dskWiggle 0.5s ease-in-out infinite alternate; }
+.dsk-app-tools { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); display: flex; gap: 3px; z-index: 2; }
+.dsk-mini {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 0;
+  display: grid;
+  place-items: center;
+  color: var(--dsk-plum);
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.14);
+  font-size: 12px;
+  cursor: pointer;
+}
+.dsk-mini:disabled { opacity: 0.4; cursor: default; }
+
+/* ---------------------------------------------------------------- widgets */
+.dsk-widgets { display: grid; grid-template-columns: 1fr; gap: 14px; min-width: 0; }
+@media (min-width: 1100px) {
+  .dsk-widgets { grid-template-columns: 1fr 1fr; }
+  .dsk-w.is-lg { grid-column: span 2; }
+}
+.dsk-w {
+  position: relative;
+  min-width: 0;
+  padding: 14px 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 10px 28px rgba(160, 90, 160, 0.14);
+}
+.dsk-w-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--dsk-plum); flex-wrap: wrap; }
+.dsk-w-head h3 { margin: 0; font-size: 14px; color: var(--dsk-ink); }
+.dsk-w-tools { display: flex; gap: 4px; margin-inline-start: auto; flex-wrap: wrap; }
+.dsk-w-clock { background: linear-gradient(160deg, #ff9cc6, #ff6fa6 58%, #e990e0); color: #fff; }
+.dsk-w-clock .dsk-w-head, .dsk-w-clock .dsk-w-head h3 { color: #fff; }
+.dsk-w-note { background: linear-gradient(170deg, #fff9d6, #ffeeb0); }
+.dsk-w-note .dsk-w-head h3 { color: #5a4420; }
+.dsk-w-clock .dsk-w-tools .dsk-mini { color: var(--dsk-plum); }
+.dsk-w-clock .dsk-muted { color: rgba(255, 255, 255, 0.9); }
+
+.dsk-clock { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 110px; }
+.dsk-clock-time b { display: block; font-size: 50px; line-height: 1; font-weight: 700; color: #fff; }
+.dsk-clock-time span { display: block; margin-top: 6px; font-size: 14px; color: #fff; opacity: 0.95; }
+.dsk-weather {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 124px;
+  isolation: isolate;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.24);
+  color: #fff;
+  cursor: pointer;
+  text-align: right;
+}
+.dsk-weather b { font-size: 30px; line-height: 1.1; }
+.dsk-weather span, .dsk-weather small { font-size: 12px; color: #fff; }
+.dsk-sun {
+  position: absolute;
+  z-index: -1;
+  top: -18px;
+  right: -14px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff6b0, #ffc247);
+  box-shadow: 0 0 18px #ffd86b;
+}
+
+.dsk-day-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dsk-day-nav b { font-size: 14px; }
+.dsk-iconbtn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 0;
+  display: grid;
+  place-items: center;
+  color: var(--dsk-plum);
+  background: #fff;
+  cursor: pointer;
+}
+.dsk-list { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; max-height: 220px; overflow: auto; }
+.dsk-ev {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 0;
+  border-left: 4px solid var(--ev, #ff4f9a);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--dsk-ink);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.dsk-ev b { max-width: 100%; font-size: 13px; }
+.dsk-ev-time { font-size: 11px; color: var(--dsk-muted); }
+.dsk-task {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: #fff;
+  font-size: 13px;
+}
+.dsk-task input { width: 16px; height: 16px; accent-color: #ff7fb0; }
+.dsk-task-title {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--dsk-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dsk-task small { color: var(--dsk-muted); font-size: 11px; }
+.dsk-count { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; color: var(--dsk-muted); }
+.dsk-count b { font-size: 20px; color: #c2185b; }
+.dsk-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(181, 140, 245, 0.16);
+  color: #6b3fa0;
+  font-size: 12px;
+  cursor: pointer;
+}
+.dsk-row2 { display: flex; gap: 8px; flex-wrap: wrap; }
+.dsk-muted { color: var(--dsk-muted); font-size: 13px; margin: 4px 0; }
+
+.dsk-note-head { display: flex; align-items: center; gap: 6px; }
+.dsk-note-head small { flex: 1; min-width: 0; color: #7a6230; font-size: 12px; }
+.dsk-pin { color: #c2185b; display: inline-flex; }
+.dsk-note-text {
+  width: 100%;
+  min-height: 120px;
+  margin-top: 6px;
+  padding: 4px 2px;
+  border: 0;
+  background: repeating-linear-gradient(transparent 0 27px, rgba(120, 90, 30, 0.13) 27px 28px);
+  color: #5a4420;
+  font: inherit;
+  line-height: 28px;
+  resize: vertical;
+  outline: none;
+}
+.dsk-note-big {
+  width: 100%;
+  min-height: 320px;
+  border: 1px solid #f1e0a8;
+  border-radius: 14px;
+  padding: 12px;
+  background: #fffbe6;
+  font: inherit;
+  line-height: 1.8;
+  color: #5a4420;
+  resize: vertical;
+}
+.dsk-secret { display: flex; gap: 8px; align-items: flex-start; padding: 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.7); font-size: 13px; }
+
+.dsk-pj { margin-bottom: 10px; }
+.dsk-pj-top { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.dsk-pj-top b { min-width: 0; }
+.dsk-bar { height: 10px; margin: 6px 0 2px; border-radius: 999px; background: #fbe6f2; overflow: hidden; }
+.dsk-bar i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #ff8fc0, #ff5fa2); }
+.dsk-pj small { font-size: 11px; color: var(--dsk-muted); }
+
+/* ---------------------------------------------------------------- dock */
+.dsk-dock {
+  position: sticky;
+  bottom: 12px;
+  z-index: 2;
+  display: flex;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100% - 4px);
+  margin: 28px auto 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.45);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 14px 34px rgba(150, 70, 140, 0.2);
+  overflow-x: auto;
+}
+.dsk-dock.is-edit { outline: 2px dashed rgba(181, 140, 245, 0.6); outline-offset: 4px; }
+.dsk-dock-btn {
+  flex: 0 0 auto;
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+.dsk-dock-btn:hover { transform: translateY(-6px) scale(1.18); }
+.dsk-dock-ic {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  overflow: hidden;
+  background: linear-gradient(160deg, #fff, #ffd6ea);
+  box-shadow: 0 6px 14px rgba(170, 90, 150, 0.2);
+  color: #c2508f;
+}
+.dsk-dock-ic svg { width: 26px; height: 26px; }
+.dsk-dock-ic img { width: 100%; height: 100%; object-fit: cover; }
+
+/* ---------------------------------------------------------------- popups */
+.dsk-launcher { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; }
+.dsk-launch { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.dsk-add-tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.dsk-tab { padding: 8px 14px; border: 1px solid #e6d8f7; border-radius: 999px; background: #fff; color: #6b3fa0; font: inherit; font-size: 13px; cursor: pointer; }
+.dsk-tab.is-on { border: 0; background: linear-gradient(90deg, #ff7fb0, #b58cf5); color: #fff; }
+.dsk-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #efe3fb;
+  border-radius: 14px;
+  background: #faf6ff;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.dsk-pick b { flex: 1; min-width: 0; }
+.dsk-pick small { color: #9b59d0; }
+.dsk-pick .dsk-app-ic { width: 40px; height: 40px; border-radius: 12px; }
+.dsk-pick .dsk-app-ic svg { width: 20px; height: 20px; }
+.dsk-pick[disabled] { opacity: 0.5; cursor: default; }
+.dsk-note-pick { display: flex; flex-direction: column; gap: 8px; }
+.dsk-note-pick .dsk-pick b { flex: none; }
+.dsk-note-pick .dsk-pick small { display: block; max-width: 100%; color: var(--dsk-muted); }
+.dsk-h { margin: 12px 0 6px; color: #6b3fa0; font-size: 14px; }
+.dsk-icon-picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 8px; margin: 6px 0; }
+.dsk-pick-icon {
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #efe3fb;
+  border-radius: 14px;
+  background: #fff;
+  color: var(--dsk-plum);
+  cursor: pointer;
+}
+.dsk-pick-icon.is-on { border-color: #b58cf5; background: linear-gradient(160deg, #ffe0f0, #eadcff); }
+.dsk-pick-icon svg { width: 22px; height: 22px; }
+.dsk-upload { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.dsk-upload-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.dsk-wall-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
+.dsk-wall-pick { padding: 4px; border: 2px solid transparent; border-radius: 16px; background: none; font: inherit; text-align: center; cursor: pointer; }
+.dsk-wall-pick.is-on { border-color: #b58cf5; }
+.dsk-wall-thumb { display: block; height: 84px; border-radius: 12px; background-size: cover; background-position: center; }
+.dsk-wall-thumb.is-default { background: linear-gradient(170deg, #ffd3ea, #d8b6f4 60%, #ffd8c3); }
+.dsk-dock-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f1e7fb; }
+.dsk-dock-row b { flex: 1; min-width: 0; }
+.dsk-dock-row .dsk-app-ic { width: 36px; height: 36px; border-radius: 10px; }
+.dsk-wx-big b { font-size: 40px; }
+.dsk-wx-big span { margin-inline-start: 8px; }
+
+/* ---------------------------------------------------------------- motion (off when the account or the system asks for less) */
+@keyframes dskTwinkle { 0%, 100% { opacity: 0.35; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.1); } }
+@keyframes dskFloat { from { transform: translateX(0); } to { transform: translateX(40px); } }
+@keyframes dskBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes dskWiggle { from { transform: rotate(-1.2deg); } to { transform: rotate(1.2deg); } }
+
+.dsk-app-btn, .dsk-dock-btn, .dsk-round, .dsk-customize { transition: transform 0.2s ease; }
+.dsk.no-anim *,
+html[data-anim="reduced"] .dsk * {
+  animation: none !important;
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dsk *, .dsk { animation: none !important; transition: none !important; }
+}
+
+/* ---------------------------------------------------------------- responsive */
+@media (max-width: 900px) {
+  .dsk-body { grid-template-columns: 1fr; gap: 20px; }
+}
+@media (max-width: 640px) {
+  .dsk { padding: 16px 14px 24px; border-radius: 20px; min-height: calc(100vh - 120px); }
+  .dsk-title h2 { font-size: 22px; }
+  .dsk-title p { font-size: 13px; }
+  .dsk-tools { width: 100%; justify-content: flex-end; }
+  .dsk-apps { grid-auto-rows: 108px; gap: 0; min-height: 216px; }
+  .dsk-app-ic { width: 60px; height: 60px; border-radius: 18px; }
+  .dsk-app-name { max-width: 78px; font-size: 12px; }
+  .dsk-app-tools .dsk-mini { width: 22px; height: 22px; }
+  .dsk-widgets { grid-template-columns: 1fr; }
+  .dsk-w.is-lg { grid-column: auto; }
+  .dsk-clock-time b { font-size: 40px; }
+  .dsk-mascot { display: none; }
+  .dsk-dock { bottom: 8px; gap: 4px; padding: 8px 10px; }
+  .dsk-dock-btn { width: 50px; height: 50px; }
+  .dsk-dock-ic { width: 46px; height: 46px; border-radius: 15px; }
+  .dsk-editbar { gap: 6px; }
+  .dsk-chip { font-size: 12px; padding: 6px 10px; }
+  .dsk-status { width: 100%; margin: 0; }
+  .dsk-round { width: 40px; height: 40px; }
+}

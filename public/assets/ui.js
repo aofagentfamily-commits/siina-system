@@ -5,6 +5,7 @@ const S = { user: null, settings: null, tz: 'Asia/Bangkok', route: '', timers: [
 
 const ICON_PATHS = {
   home: 'M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z',
+  desktop: 'M3 4h18v12H3z M8 20h8 M12 16v4',
   chat: 'M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z',
   folder: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
   calendar: 'M4 5h16v15H4z M4 9h16 M8 3v4 M16 3v4',

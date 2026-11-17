@@ -3,6 +3,7 @@
 
 const NAV = [
   { k: 'home', label: 'หน้าแรก', i: 'home' },
+  { k: 'desktop', label: 'My Desktop ✨', i: 'desktop' },
   { k: 'chat', label: 'ห้องแชท', i: 'chat' },
   { k: 'projects', label: 'โปรเจ็กต์', i: 'folder' },
   { k: 'calendar', label: 'ปฏิทิน', i: 'calendar' },
@@ -11,7 +12,7 @@ const NAV = [
   { k: 'settings', label: 'ตั้งค่า', i: 'settings' },
 ];
 const PAGES = {
-  shop: renderShop, home: renderHomeDash, chat: renderChat, projects: renderProjects,
+  shop: renderShop, home: renderHomeDash, desktop: renderDesktop, chat: renderChat, projects: renderProjects,
   calendar: renderCalendar, summary: renderSummary, vault: renderVault, settings: renderSettings,
 };
 const LOGIN_TILES = [
