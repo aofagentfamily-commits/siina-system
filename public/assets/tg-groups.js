@@ -35,7 +35,7 @@ function tgGroupCard(g) {
   const tags = (g.tags || []).map((t) => `<span class="tgg-chip" style="--tag:${tggColor(t.color)}">${esc(t.name)}</span>`).join('');
   return `<article class="tgg-card ${unlinked ? 'is-unlinked' : ''}">
     <header class="tgg-top">
-      <span class="tgg-avatar">${tgGroupAvatarInner(g)}</span>
+      <button type="button" class="tgg-avatar" data-action="tg-group-avatar" data-id="${esc(g.id)}" aria-label="ตั้งรูปโปรไฟล์กลุ่ม" title="ตั้งรูปโปรไฟล์กลุ่ม">${tgGroupAvatarInner(g)}</button>
       <div class="tgg-title">
         <h4 class="ellipsis">${esc(g.title)}</h4>
         <p>Chat ID</p>

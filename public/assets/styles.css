@@ -1238,3 +1238,6 @@ body[data-route="calendar"] .modal .btn.primary { color: #FFFFFF; }
 
 .cv-av-bot.cv-av-pic { border-radius: 50%; overflow: hidden; }
 .cv-av-bot.cv-av-pic img { width: 100%; height: 100%; object-fit: cover; }
+
+.tgg-avatar { border: 0; padding: 0; cursor: pointer; }
+.tgg-avatar:hover .tg-av { box-shadow: var(--glow); }
