@@ -729,42 +729,69 @@ ACTIONS['event-delete'] = async (el) => {
 
 /* ================================================================ SUMMARY */
 S.sumTab = 'all';
+// Card colours by kind (pastel background, coloured edge). Telegram and reply items use their own colour.
+const SUM_TONE = {
+  urgent: ['#FFF0F6', '#FF376C'], telegram: ['#EAF3FF', '#2987FF'], reply: ['#FFF9E7', '#FFCC24'],
+  assigned: ['#F0E8FF', '#9B6DE5'], info: ['#EAF9F0', '#38B67B'], follow: ['#FFF0E5', '#FF9B52'],
+};
+const SUM_PILLS = [['all', 'ทั้งหมด', 'grid'], ['urgent', 'เร่งด่วน', 'bolt'], ['reply', 'ต้องตอบ', 'reply'],
+  ['assigned', 'งานที่ได้รับมอบหมาย', 'briefcase'], ['info', 'เรื่องแจ้งให้ทราบ', 'megaphone'],
+  ['follow', 'ติดตามภายหลัง', 'bookmark'], ['done', 'เสร็จแล้ว', 'check2']];
+const SUM_STATE_LABEL = { open: 'ยังไม่ได้อ่าน', read: 'อ่านแล้ว', follow: 'ติดตามภายหลัง', done: 'เสร็จสิ้น' };
+
 async function renderSummary(params) {
   setPageHead(PAGE_TITLES.summary, 'สิ่งที่ไม่ควรพลาดจาก Telegram, นัดหมาย และงาน');
   if (params && params.tab) S.sumTab = params.tab;
   const { items } = await apiGet('/api/summary?tab=' + S.sumTab);
   fillPage(`
-    <div class="page-head"><div><h2>สรุปสำคัญ</h2><p>รวมสิ่งที่ต้องรู้ไว้ในที่เดียว รายการที่ยังไม่เสร็จจะไม่หายไป</p></div>
-      <button class="btn" disabled title="ฟังก์ชันสรุปด้วย AI ยังไม่ได้เปิดใช้งาน">${icon('shield')} สรุปด้วย AI (ยังไม่เปิดใช้งาน)</button></div>
-    <div class="tabs" role="tablist">
-      ${Object.entries(SUM_CATEGORY).map(([k, l]) => `<button class="tab" role="tab" aria-selected="${S.sumTab === k}" data-action="sum-tab" data-tab="${k}">${esc(l)}</button>`).join('')}
+    <div class="sum-head">
+      <div class="sum-title">
+        <span class="sum-icon">${icon('notebook')}</span>
+        <div><h2>สรุปสำคัญ</h2><p>รวมสิ่งที่ต้องรู้ไว้ในที่เดียว รายการที่ยังไม่เสร็จจะไม่หายไป</p></div>
+      </div>
+      <button class="sum-ai" disabled title="ฟังก์ชันสรุปด้วย AI ยังไม่ได้เปิดใช้งาน">${icon('star', 'sm')} สรุปด้วย AI (ยังไม่เปิดใช้งาน)</button>
     </div>
-    ${items.length ? `<div class="timeline">${items.map(sumCard).join('')}</div>` : emptyBox('ไม่มีรายการในหมวดนี้')}
+    <nav class="sum-pills" role="tablist" aria-label="กรองรายการ">
+      ${SUM_PILLS.map(([k, l, ic]) => `<button class="sum-pill" role="tab" aria-selected="${S.sumTab === k}" data-action="sum-tab" data-tab="${k}">${icon(ic, 'sm')} ${esc(l)}</button>`).join('')}
+    </nav>
+    ${items.length ? `<div class="sum-list">${items.map(sumCard).join('')}</div>` : `<div class="sum-empty">${icon('check2')}<b>ไม่มีรายการในหมวดนี้</b><small>รายการจากข้อความ Telegram และปฏิทินจะปรากฏที่นี่</small></div>`}
   `);
 }
 
+function sumTone(it) {
+  if (it.state === 'follow') return 'follow';
+  if (it.category === 'reply') return 'reply';
+  if (it.sourceType === 'telegram') return 'telegram';
+  if (it.category === 'urgent') return 'urgent';
+  if (it.category === 'assigned') return 'assigned';
+  return 'info';
+}
+
 function sumCard(it) {
-  const st = SUM_STATE[it.state] || SUM_STATE.open;
-  const cat = SUM_CATEGORY[it.category] || '';
-  const done = it.state === 'done';
-  return `<article class="card sum-card ${it.priority === 'high' ? 'p-high' : ''} ${done ? 'is-done' : ''}">
-    <div class="rail"></div>
-    <div class="body">
-      <div class="top">
-        <span class="badge ${it.priority === 'high' ? 'danger dot' : ''}">${it.priority === 'high' ? 'สำคัญสูง' : 'ปกติ'}</span>
-        <span class="badge">${esc(cat)}</span>
-        <span>${esc(it.source)}</span>
-        <span>· ${esc(fmtDateTime(it.at))}</span>
-        <span class="badge ${st[1]} ${it.state === 'open' ? '' : 'dot'}">${esc(st[0])}</span>
+  const tone = sumTone(it);
+  const [bg, edge] = SUM_TONE[tone];
+  const catLabel = (SUM_PILLS.find(([k]) => k === it.category) || [, 'ทั่วไป'])[1];
+  const isTelegram = it.sourceType === 'telegram';
+  const type = esc(it.sourceType);
+  const id = esc(it.sourceId);
+  const action = (state, label, ic) => `<button class="sum-btn ${it.state === state ? 'is-on' : ''}" data-action="sum-state" data-type="${type}" data-id="${id}" data-state="${state}" aria-pressed="${it.state === state}">${icon(ic, 'sm')} ${label}</button>`;
+  return `<article class="sum-card tone-${tone} ${it.state === 'done' ? 'is-done' : ''}" style="--sum-bg:${bg};--sum-edge:${edge}">
+    <div class="sum-main">
+      <div class="sum-tags">
+        ${it.priority === 'high' ? `<span class="sum-tag tag-high">${icon('alert', 'sm')} สำคัญสูง</span>` : ''}
+        <span class="sum-tag tag-cat">${esc(catLabel)}</span>
+        <span class="sum-src">${icon(isTelegram ? 'chat' : 'calendar', 'sm')} ${esc(it.source)}</span>
+        <span class="sum-when">${esc(fmtDateTime(it.at))}</span>
+        <span class="sum-state st-${esc(it.state)}">${esc(SUM_STATE_LABEL[it.state] || SUM_STATE_LABEL.open)}</span>
       </div>
-      <h3>${esc(it.title)}</h3>
-      <p>${esc(it.summary)}</p>
-      <div class="acts">
-        <button class="btn sm primary" data-action="summary-open" data-type="${esc(it.sourceType)}" data-id="${esc(it.sourceId)}" data-target='${esc(JSON.stringify(it.target))}'>${icon('external', 'sm')} เปิดต้นทาง</button>
-        <button class="btn sm" data-action="sum-state" data-type="${esc(it.sourceType)}" data-id="${esc(it.sourceId)}" data-state="read">${icon('check', 'sm')} อ่านแล้ว</button>
-        <button class="btn sm" data-action="sum-state" data-type="${esc(it.sourceType)}" data-id="${esc(it.sourceId)}" data-state="follow">${icon('bookmark', 'sm')} ติดตามภายหลัง</button>
-        <button class="btn sm" data-action="sum-state" data-type="${esc(it.sourceType)}" data-id="${esc(it.sourceId)}" data-state="done">${icon('check2', 'sm')} เสร็จสิ้น</button>
-      </div>
+      <h3 class="sum-name">${esc(it.title)}</h3>
+      <p class="sum-text">${esc(it.summary)}</p>
+    </div>
+    <div class="sum-actions">
+      <button class="sum-btn primary" data-action="summary-open" data-type="${type}" data-id="${id}" data-target='${esc(JSON.stringify(it.target))}'>${icon('external', 'sm')} เปิดต้นทาง</button>
+      ${action('read', 'อ่านแล้ว', 'check')}
+      ${action('follow', 'ติดตามภายหลัง', 'bookmark')}
+      ${action('done', 'เสร็จสิ้น', 'check2')}
     </div>
   </article>`;
 }
