@@ -33,21 +33,10 @@ function paintChatTheme(theme, options) {
   main.dataset.text = options.textStyle;
   main.dataset.primary = options.primary ? '1' : '0';
   main.dataset.anim = options.animation ? '1' : '0';
+  main.dataset.mascot = options.mascot ? '1' : '0';
   main.style.setProperty('--ct-opacity', String(Math.max(0, Math.min(100, options.opacity)) / 100));
-  const body = main.querySelector('.cv-body') || main;
-  let mascot = body.querySelector('.ct-mascot');
-  const want = theme === 'couple' && options.mascot;
-  if (want && !mascot) {
-    mascot = document.createElement('img');
-    mascot.className = 'ct-mascot';
-    mascot.alt = '';
-    mascot.src = '/assets/theme/couple.png';
-    mascot.width = 230;
-    mascot.height = 257;
-    body.appendChild(mascot);
-  } else if (!want && mascot) {
-    mascot.remove();
-  }
+  // older builds pasted a small picture here; remove it if it is still in the page
+  main.querySelectorAll('.ct-mascot').forEach((el) => el.remove());
 }
 
 async function applyChatTheme() {
