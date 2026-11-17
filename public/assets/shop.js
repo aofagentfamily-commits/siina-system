@@ -113,7 +113,6 @@ function shopHtml() {
 function renderShop() {
   fillPage(shopHtml());
 }
-PAGES.shop = renderShop;
 
 ACTIONS['shop-cat'] = (el) => {
   S.shopCat = el.dataset.id;
