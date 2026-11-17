@@ -60,6 +60,7 @@ async function openCatForm(id) {
   const pickedColor = cat ? cat.color : CAT_COLORS[0];
   openModal({
     title: cat ? 'แก้ไขหมวดห้องแชท' : 'เพิ่มหมวดห้องแชท',
+    onMount: (modal) => { const f = modal.querySelector('form[data-form="cat-form"]'); if (f) catRoomCount(f); },
     body: `<form data-form="cat-form" data-id="${esc(id || '')}" class="stack">
       <label class="field"><span>ชื่อหมวด</span><input class="input" name="name" maxlength="30" required value="${esc(cat ? cat.name : '')}" placeholder="เช่น ลูกค้า"></label>
       <div class="field"><span>ไอคอน</span>
@@ -75,6 +76,8 @@ async function openCatForm(id) {
         <input type="hidden" name="color" value="${esc(pickedColor)}">
       </div>
       <div class="field"><span>ห้องแชทในหมวดนี้ (เลือกได้หลายหมวดต่อห้อง)</span>
+        <div class="cat-rooms-bar"><small class="muted" data-role="room-count"></small>
+          ${groups.length ? '<button type="button" class="btn sm ghost" data-action="cat-room-all">เลือกทั้งหมด / ล้าง</button>' : ''}</div>
         <div class="cat-rooms">${groups.length ? groups.map((g) => `<label class="cat-room">
             <input type="checkbox" name="groups" value="${esc(g.id)}" ${cat && cat.groupIds.includes(g.id) ? 'checked' : ''}>
             <span class="ellipsis">${esc(g.title)}</span>${g.enabled ? '' : '<small class="muted">ปิดติดตาม</small>'}</label>`).join('')
@@ -86,6 +89,21 @@ async function openCatForm(id) {
     </form>`,
   });
 }
+function catRoomCount(form) {
+  const boxes = [...form.querySelectorAll('input[name="groups"]')];
+  const count = form.querySelector('[data-role="room-count"]');
+  if (count) count.textContent = `เลือกแล้ว ${boxes.filter((b) => b.checked).length} จาก ${boxes.length} ห้อง`;
+}
+ACTIONS['cat-room-all'] = (el) => {
+  const form = el.closest('form');
+  const boxes = [...form.querySelectorAll('input[name="groups"]')];
+  const turnOn = boxes.some((b) => !b.checked);
+  boxes.forEach((b) => { b.checked = turnOn; });
+  catRoomCount(form);
+};
+document.addEventListener('change', (e) => {
+  if (e.target.matches && e.target.matches('input[name="groups"]')) catRoomCount(e.target.closest('form'));
+});
 ACTIONS['cat-pick-icon'] = (el) => {
   const form = el.closest('form');
   form.querySelector('[name="icon"]').value = el.getAttribute('aria-label');

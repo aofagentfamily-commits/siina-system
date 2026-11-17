@@ -1485,7 +1485,8 @@ body[data-route="calendar"] .modal .btn.primary { color: #FFFFFF; }
 .cat-pick-btn[aria-checked="true"] { background: #FF4F9A; color: #FFFFFF; box-shadow: 0 0 0 2px #FFFFFF, 0 0 12px rgba(255, 79, 154, .6); }
 .cat-sw { width: 36px; height: 36px; border-radius: 50%; background: var(--sw); border: 2px solid rgba(255, 255, 255, .3); cursor: pointer; padding: 0; }
 .cat-sw[aria-checked="true"] { box-shadow: 0 0 0 2px #FFFFFF, 0 0 0 4px #FF4FA3; }
-.cat-rooms { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+.cat-rooms { display: flex; flex-direction: column; gap: 6px; }
+.cat-rooms-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
 .cat-room { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(255, 255, 255, .06); color: #FFFFFF; min-width: 0; }
 .cat-room input { width: 18px; height: 18px; accent-color: #FF5AA5; flex: none; }
 .cat-room .ellipsis { min-width: 0; flex: 1; }
