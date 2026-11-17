@@ -24,7 +24,7 @@ ACTIONS['chat-category'] = (el) => {
 // Welcome: no room is opened on entry. The egg mascot floats until the user picks a room.
 function chatWelcomeHtml() {
   return `<div class="cv-welcome">
-    <div class="cv-welcome-egg">${eggHtml({ size: 190 })}</div>
+    <img class="cv-welcome-img" src="/assets/welcome-egg.png" width="255" height="215" alt="น้องไข่ดาว SIINA SYSTEM" decoding="async">
     <h3>น้องไข่ดาวมาแล้ว</h3>
     <span class="cv-welcome-cta">เลือกห้องแชทได้เลย</span>
   </div>`;

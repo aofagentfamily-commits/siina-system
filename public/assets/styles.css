@@ -1500,3 +1500,16 @@ body[data-route="calendar"] .modal .btn.primary { color: #FFFFFF; }
 .cv-welcome-egg { margin-bottom: 4px; }
 :root .cv-welcome .egg-float { animation: egg-bob 3.2s ease-in-out infinite !important; }
 @media (prefers-reduced-motion: reduce) { :root .cv-welcome .egg-float { animation: none !important; } }
+
+/* welcome picture: the egg image with soft edges, floating gently (off under reduced motion) */
+.cv-welcome-img {
+  width: min(255px, 70vw); height: auto; display: block; margin-bottom: 4px;
+  -webkit-mask-image: radial-gradient(ellipse 58% 60% at 50% 52%, #000 62%, transparent 100%);
+          mask-image: radial-gradient(ellipse 58% 60% at 50% 52%, #000 62%, transparent 100%);
+  animation: welcome-float 3.6s ease-in-out infinite;
+}
+@keyframes welcome-float {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50% { transform: translateY(-10px) rotate(1.5deg); }
+}
+@media (prefers-reduced-motion: reduce) { .cv-welcome-img { animation: none; } }
