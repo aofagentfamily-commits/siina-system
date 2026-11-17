@@ -119,8 +119,27 @@ function storedHtml(richHtml) {
 }
 
 // ---------------------------------------------------------------- templates
+const KINDS = ['notice', 'event', 'promo', 'reminder', 'info', 'update', 'thanks'];
 function templateDto(t) {
-  return { id: t.id, title: t.title, content: t.content, formatted: t.formatted_html || null, updatedAt: t.updated_at };
+  return { id: t.id, title: t.title, content: t.content, formatted: t.formatted_html || null, kind: t.kind || 'info',
+    buttons: t.buttons ? JSON.parse(t.buttons) : [], updatedAt: t.updated_at };
+}
+
+// Inline buttons: a web link (https/http only) or a Telegram username (becomes a t.me link). At most 8.
+function buttonsInput(list) {
+  if (list == null || list === '') return [];
+  if (!Array.isArray(list)) throw new u.HttpError(400, 'รูปแบบปุ่มไม่ถูกต้อง', 'VALIDATION');
+  if (list.length > 8) throw new u.HttpError(400, 'เพิ่มปุ่มได้มากที่สุด 8 ปุ่ม', 'VALIDATION');
+  return list.map((b) => {
+    const label = u.str(b && b.label, { max: 40, required: true, field: 'ชื่อปุ่ม' });
+    if (b.type === 'url') return { label, type: 'url', url: u.httpUrlOpt(b.target, 'ลิงก์ของปุ่ม') };
+    if (b.type === 'username') {
+      const name = String(b.target || '').trim().replace(/^@/, '');
+      if (!/^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(name)) throw new u.HttpError(400, 'Telegram Username ไม่ถูกต้อง', 'VALIDATION');
+      return { label, type: 'username', url: 'https://t.me/' + name, username: '@' + name };
+    }
+    throw new u.HttpError(400, 'ประเภทปุ่มไม่ถูกต้อง', 'VALIDATION');
+  });
 }
 
 function templateInput(body, existing) {
@@ -158,8 +177,10 @@ function createTemplate(user, body) {
   const v = templateInput(body, null);
   const id = u.uid();
   const now = u.nowIso();
-  db.prepare('INSERT INTO telegram_templates (id, user_id, title, content, formatted_html, created_at, updated_at) VALUES (?,?,?,?,?,?,?)')
-    .run(id, user.id, v.title, v.content, v.formatted, now, now);
+  const kind = KINDS.includes(body.kind) ? body.kind : 'info';
+  const buttons = buttonsInput(body.buttons);
+  db.prepare('INSERT INTO telegram_templates (id, user_id, title, content, formatted_html, created_at, updated_at, kind, buttons) VALUES (?,?,?,?,?,?,?,?,?)')
+    .run(id, user.id, v.title, v.content, v.formatted, now, now, kind, buttons.length ? JSON.stringify(buttons) : null);
   u.activity(user.id, 'create', 'telegram_template', id, v.title);
   return templateDto(getTemplate(user, id));
 }
@@ -210,6 +231,7 @@ function getSticker(user, id) {
 }
 
 module.exports = {
+  buttonsInput,
   telegramHtml, plainFromHtml, storedHtml, render,
   listTemplates, createTemplate, updateTemplate, deleteTemplate,
   listStickers, addSticker, deleteSticker, getSticker,

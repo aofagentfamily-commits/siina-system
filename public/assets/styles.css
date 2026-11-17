@@ -1919,3 +1919,64 @@ body[data-route="shop"] .app { display: block !important; }
   .home-banner-mascot { order: -1; }
   .hw-weather-temp b { font-size: 46px; }
 }
+
+/* ---------------------------------------------------------------- message builder (bld-*), inside the chat page */
+.modal.bld-modal { width: min(1100px, 100%); background: linear-gradient(180deg, #2E1B3D, #221533); border: 1.5px solid #FF7EC0; border-radius: 22px; color: #FFFFFF; box-shadow: 0 0 30px rgba(255, 90, 165, .35), 0 20px 50px rgba(0, 0, 0, .45); }
+.modal.bld-modal header h2 { color: #FFFFFF; }
+.bld { display: flex; flex-direction: column; gap: 12px; }
+.bld-sub { color: #E9D8F0; font-size: 14px; }
+.bld-grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 14px; }
+.bld-side, .bld-main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.bld-side h4, .bld-block h4 { font-size: 15px; font-weight: 800; color: #FFFFFF; margin-bottom: 6px; }
+.bld-kinds { display: flex; flex-wrap: wrap; gap: 6px; }
+.bld-pill { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 0 10px; border-radius: 999px; border: 1.5px solid #FFB7D5; background: transparent; color: #FFFFFF; font: inherit; font-size: 13px; cursor: pointer; }
+.bld-pill.is-on { background: #FF5AA5; border-color: #FF5AA5; font-weight: 700; }
+.bld-tpls { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; }
+.bld-tpl { display: flex; align-items: center; gap: 10px; text-align: left; border: 0; border-radius: 16px; padding: 10px 12px; background: var(--tpl, #FFD1E5); color: #30213A; font: inherit; cursor: pointer; transition: transform .15s ease, box-shadow .2s ease; }
+.bld-tpl:hover { transform: translateY(-1px); box-shadow: 0 8px 16px rgba(0, 0, 0, .25); }
+.bld-tpl.is-on { box-shadow: 0 0 0 2px #FF5AA5; }
+.bld-tpl b { display: block; font-size: 14px; }
+.bld-tpl small { color: #5C4A66; font-size: 12px; }
+.bld-tpl-ic { width: 34px; height: 34px; border-radius: 12px; background: rgba(255, 255, 255, .7); display: grid; place-items: center; flex: none; }
+.bld-muted { color: #D9C5E4; }
+.bld-block { background: #FFF7FB; color: #30213A; border-radius: 18px; padding: 12px; }
+.bld-block h4 { color: #30213A; }
+.bld-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; background: #FFFFFF; border: 1px solid #F0C9E0; border-radius: 12px; padding: 4px; margin-bottom: 8px; }
+.bld-toolbar button { min-width: 34px; height: 32px; border: 0; border-radius: 9px; background: transparent; color: #30213A; font: inherit; font-size: 14px; cursor: pointer; }
+.bld-toolbar button:hover { background: #FFD1E8; }
+.bld-sep { width: 1px; height: 20px; background: #F0C9E0; margin: 0 4px; }
+.bld-editor { min-height: 120px; max-height: 260px; overflow-y: auto; background: #FFFFFF; border: 1.5px solid #F0C9E0; border-radius: 14px; padding: 12px; line-height: 1.6; outline: none; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bld-editor:focus { border-color: #FF5AA5; box-shadow: 0 0 0 3px rgba(255, 90, 165, .2); }
+.bld-editor blockquote { border-left: 3px solid #FF5AA5; padding-left: 10px; color: #5C4A66; }
+.bld-editor code { background: #F6E6F1; border-radius: 6px; padding: 0 4px; }
+.bld-count { text-align: right; color: #75687B; font-size: 12px; margin-top: 4px; }
+.bld-preview { background: #FFE8F3; border-radius: 16px; padding: 12px; min-height: 80px; }
+.bld-bubble { background: #FFFFFF; border-radius: 14px 14px 14px 4px; padding: 10px 12px; color: #30213A; line-height: 1.6; overflow-wrap: anywhere; box-shadow: 0 2px 8px rgba(255, 90, 165, .15); }
+.bld-bubble blockquote { border-left: 3px solid #FF5AA5; padding-left: 8px; color: #5C4A66; margin: 4px 0; }
+.bld-bubble-empty { color: #8C7A96; }
+.bld-prev-btn { margin-top: 6px; background: #FFFFFF; color: #2A6FD6; border: 1px solid #FFB7D5; border-radius: 10px; padding: 8px; text-align: center; font-weight: 700; }
+.bld-warn { color: #A0457A; font-size: 12px; margin-top: 4px; }
+.bld-btn-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.bld-switch { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: #30213A; font-size: 14px; }
+.bld-switch input { width: 18px; height: 18px; accent-color: #FF5AA5; }
+.bld-btn-row { display: grid; grid-template-columns: auto 1fr 1.2fr 1.4fr auto auto auto; gap: 6px; align-items: center; margin-top: 8px; }
+.bld-btn-row .input, .bld-btn-row .select { background: #FFFFFF; color: #30213A; border: 1.5px solid #F0C9E0; min-width: 0; }
+.bld-grip { color: #B69AB5; cursor: grab; user-select: none; }
+.bld-icon { width: 30px; height: 30px; border-radius: 9px; border: 1px solid #F0C9E0; background: #FFFFFF; color: #30213A; cursor: pointer; font-size: 11px; }
+.bld-icon.danger { color: #D6336C; }
+.bld-icon:disabled { opacity: .35; cursor: default; }
+.bld-add { margin-top: 10px; min-height: 38px; padding: 0 16px; border-radius: 999px; border: 1.5px solid #FF5AA5; background: #FFFFFF; color: #D6336C; font: inherit; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.bld-hint { color: #E9D8F0; font-size: 13px; }
+.bld-foot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #FFF7FB; border-radius: 16px; padding: 10px 12px; color: #30213A; }
+.bld-foot .input { max-width: 240px; background: #FFFFFF; color: #30213A; border: 1.5px solid #F0C9E0; }
+.bld-save { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; font-size: 14px; }
+.bld-spacer { flex: 1; }
+.bld-send { background: #FF5AA5; color: #FFFFFF; border: 0; border-radius: 999px; min-height: 46px; padding: 0 22px; font: inherit; font-weight: 800; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 10px 22px rgba(255, 90, 165, .4); }
+.bld-emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.bld-emoji { font-size: 26px; border: 0; background: #FFF0F8; border-radius: 12px; padding: 8px; cursor: pointer; }
+@media (max-width: 900px) {
+  .bld-grid { grid-template-columns: 1fr; }
+  .bld-btn-row { grid-template-columns: auto 1fr auto auto; }
+  .bld-btn-row select, .bld-btn-row .bld-grip { display: none; }
+  .bld-btn-row > input:nth-of-type(2) { grid-column: 2; }
+}

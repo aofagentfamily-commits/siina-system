@@ -161,6 +161,7 @@ async function renderChat(params) {
               <div class="cv-plus-menu" id="cvPlusMenu" role="menu" hidden>
                 <button type="button" role="menuitem" data-action="chat-menu-file">${icon('image')}<span>รูปภาพ / ไฟล์</span></button>
                 <button type="button" role="menuitem" data-action="chat-menu-templates">${icon('file')}<span>เทมเพลตข้อความ</span></button>
+                <button type="button" role="menuitem" data-action="chat-menu-builder">${icon('edit')}<span>แต่งข้อความ</span></button>
                 <button type="button" role="menuitem" data-action="chat-menu-stickers">${icon('heart')}<span>สติกเกอร์</span></button>
               </div>
             </div>

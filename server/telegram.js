@@ -898,6 +898,8 @@ async function deliver(user, outboxId, eventName = 'ส่งข้อควา�
     if (o.html) body.parse_mode = 'HTML';
     if (o.thread_id) body.message_thread_id = o.thread_id;
     if (o.reply_to_message_id) body.reply_parameters = { message_id: o.reply_to_message_id, allow_sending_without_reply: true };
+    // inline buttons: one link per row, exactly as stored (already validated when saved)
+    if (o.buttons) body.reply_markup = { inline_keyboard: JSON.parse(o.buttons).map((b) => [{ text: b.label, url: b.url }]) };
     const sent = await callApi(botToken(bot), 'sendMessage', body);
     db.prepare("UPDATE telegram_outbox SET status='sent', telegram_message_id=?, error=NULL, updated_at=? WHERE id=?")
       .run(sent.message_id, u.nowIso(), o.id);
@@ -918,7 +920,11 @@ async function sendMessage(user, groupId, body, clientKey) {
   const g = assertUnlocked(user, getGroup(user, groupId));
   if (!g.enabled) throw new u.HttpError(400, 'กลุ่มนี้ปิดการติดตามอยู่ เปิดก่อนจึงจะส่งได้', 'DISABLED');
   if (!g.bot_id) throw new u.HttpError(400, 'กลุ่มนี้ยังไม่ได้เชื่อมต่อบอท เลือกบอทก่อนส่งข้อความ', 'UNLINKED');
-  const text = u.str(body.text, { max: 4000, required: true, field: 'ข้อความ' });
+  // The text comes from the rich editor as HTML when no plain text is sent; the server converts it with its whitelist.
+  const formattedIn = body.formatted ? String(body.formatted) : null;
+  const text = formattedIn && !body.text ? templates.plainFromHtml(formattedIn) : u.str(body.text, { max: 4000, required: true, field: 'ข้อความ' });
+  if (!text) throw new u.HttpError(400, 'ข้อความว่างเปล่า', 'VALIDATION');
+  const buttons = templates.buttonsInput(body.buttons);
   const key = u.str(clientKey || body.clientKey, { max: 100, required: true, field: 'รหัสการส่ง' });
   const replyTo = body.replyToMessageId ? u.int(body.replyToMessageId, { min: 1, field: 'ข้อความที่ตอบกลับ' }) : null;
   const threadId = body.threadId ? u.int(body.threadId, { min: 1, field: 'หัวข้อ' }) : null;
@@ -926,14 +932,14 @@ async function sendMessage(user, groupId, body, clientKey) {
   if (existing) return outboxDto(existing); // double-click / retry: return the same send
   // Formatting is used only when the text still matches the template exactly.
   let html = null;
-  if (body.formatted && templates.plainFromHtml(String(body.formatted)) === text) {
-    html = templates.telegramHtml(String(body.formatted));
+  if (formattedIn && templates.plainFromHtml(formattedIn) === text) {
+    html = templates.telegramHtml(formattedIn);
     if (html.length > 4096) throw new u.HttpError(400, 'ข้อความยาวเกินที่ Telegram รองรับ', 'TOO_LONG');
   }
   const id = u.uid();
   const now = u.nowIso();
-  db.prepare(`INSERT INTO telegram_outbox (id, user_id, group_id, text, reply_to_message_id, client_key, status, created_at, updated_at, thread_id, html)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(id, user.id, g.id, text, replyTo, key, 'sending', now, now, threadId, html);
+  db.prepare(`INSERT INTO telegram_outbox (id, user_id, group_id, text, reply_to_message_id, client_key, status, created_at, updated_at, thread_id, html, buttons)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, user.id, g.id, text, replyTo, key, 'sending', now, now, threadId, html, buttons.length ? JSON.stringify(buttons) : null);
   return deliver(user, id, 'ส่งข้อความ');
 }
 
