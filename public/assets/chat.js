@@ -123,6 +123,7 @@ async function renderChat(params) {
             <button class="btn icon ghost" disabled title="ปักหมุด: ยังไม่พร้อมใช้งาน" aria-label="ปักหมุด (ยังไม่พร้อมใช้งาน)">${icon('bookmark')}</button>
             <button class="btn icon ghost" data-action="chat-search-toggle" aria-label="ค้นหาในแชท" aria-expanded="false">${icon('search')}</button>
             <button class="btn icon ghost" data-action="chat-info" aria-label="รายละเอียดกลุ่ม">${icon('alert')}</button>
+            <button class="btn icon ghost cv-clear" data-action="chat-clear" aria-label="ลบประวัติแชทในระบบ" title="ลบประวัติแชทในระบบ">${icon('trash2')}</button>
           </div>
         </header>
         <nav class="cv-headtabs" aria-label="ประเภทข้อความ">
@@ -319,7 +320,9 @@ function messagesHtml() {
     return `<div class="cv-notice cv-ai"><b>สรุปด้วย AI ยังไม่พร้อมใช้งาน</b><br>ระบบจะแสดงผลสรุปเมื่อเชื่อมต่อบริการ AI แล้วเท่านั้น จึงยังไม่แสดงผลลัพธ์</div>`;
   }
   const list = visibleMessages();
-  if (!list.length) return `<div class="empty">${S.chat.messages.length ? 'ไม่มีข้อความที่ตรงกับตัวกรองนี้' : 'ยังไม่มีข้อความที่บันทึกไว้'}</div>`;
+  if (!list.length) return S.chat.messages.length
+    ? `<div class="empty">ไม่มีข้อความที่ตรงกับตัวกรองนี้</div>`
+    : `<div class="empty cv-empty"><b>ยังไม่มีข้อความในห้องนี้</b><small>ข้อความที่ได้รับใหม่จาก Telegram จะแสดงที่นี่โดยอัตโนมัติ</small></div>`;
   return list.map(bubbleHtml).join('');
 }
 

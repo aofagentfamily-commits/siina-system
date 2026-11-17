@@ -235,6 +235,17 @@ CREATE TABLE IF NOT EXISTS notes (
 );
 CREATE INDEX IF NOT EXISTS idx_notes_user ON notes(user_id, updated_at);
 
+-- High-water marks left by "clear history": stored messages up to upto_message_id are never stored again.
+CREATE TABLE IF NOT EXISTS telegram_history_marks (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id TEXT NOT NULL REFERENCES telegram_groups(id) ON DELETE CASCADE,
+  thread_id INTEGER,
+  upto_message_id INTEGER NOT NULL,
+  cleared_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_history_marks_group ON telegram_history_marks(group_id);
+
 CREATE TABLE IF NOT EXISTS telegram_group_tags (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

@@ -449,3 +449,45 @@ ACTIONS['pin-cancel'] = async () => {
   if (open) renderChat({ group: open.id });
   else setPinError('ไม่มีห้องแชทที่เปิดได้ในตอนนี้');
 };
+
+// ---------------------------------------------------------------- clear chat history (SIINA SYSTEM only)
+function topicLabelOf(threadKey) {
+  const t = (S.chat.topics || []).find((x) => String(x.threadId) === String(threadKey));
+  return t ? t.name : 'หัวข้อ #' + threadKey;
+}
+ACTIONS['chat-clear'] = () => {
+  const gid = S.chat.groupId;
+  if (!gid) return;
+  const current = S.chat.topic !== 'all' && (S.chat.topics || []).length ? S.chat.topic : null;
+  const scope = current
+    ? `<fieldset class="ch-scope">
+        <legend class="muted small">ขอบเขตการลบ</legend>
+        <label class="tgg-check"><input type="radio" name="scope" value="topic" checked> เฉพาะหัวข้อ “${esc(topicLabelOf(current))}”</label>
+        <label class="tgg-check"><input type="radio" name="scope" value="all"> ทุกหัวข้อของกลุ่มนี้</label>
+      </fieldset>`
+    : '<p class="muted small">จะลบประวัติทั้งกลุ่มนี้</p>';
+  openModal({
+    title: 'ลบประวัติห้องแชท?',
+    body: `<form data-form="chat-clear" data-group="${esc(gid)}" data-thread="${esc(current || '')}" class="stack">
+      <p>คุณต้องการลบประวัติข้อความของห้องนี้ออกจาก SIINA SYSTEM ใช่หรือไม่?</p>
+      <p class="muted small">การดำเนินการนี้จะมีผลเฉพาะข้อมูลที่จัดเก็บภายใน SIINA SYSTEM เท่านั้น ข้อความและประวัติการสนทนาใน Telegram จริงจะไม่ถูกลบหรือเปลี่ยนแปลง</p>
+      ${scope}
+      <p class="small" data-role="form-error"></p>
+      <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-action="close-modal">ยกเลิก</button>
+        <button type="submit" class="btn danger-pink">ยืนยันลบประวัติ</button></div>
+    </form>`,
+  });
+};
+FORMS['chat-clear'] = async (form) => {
+  const gid = form.dataset.group;
+  const picked = form.querySelector('[name="scope"]:checked');
+  const onlyTopic = !!picked && picked.value === 'topic';
+  const threadId = onlyTopic ? Number(form.dataset.thread) : null;
+  const btn = form.querySelector('[type="submit"]');
+  try {
+    await busy(btn, () => apiPost(`/api/telegram/groups/${gid}/clear-history`, { threadId }));
+    closeAllModals();
+    toast('ลบประวัติแชทใน SIINA SYSTEM เรียบร้อยแล้ว');
+    renderChat({ group: gid });
+  } catch (err) { setFormError(form, err.message); }
+};

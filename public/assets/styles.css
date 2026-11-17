@@ -1371,3 +1371,13 @@ body[data-route="calendar"] .modal .btn.primary { color: #FFFFFF; }
 .tgg-lock-fields > div[hidden], .tgg-change[hidden], .tgg-check[hidden] { display: none; }
 .tgg-pin-field input { letter-spacing: 6px; text-align: center; font-weight: 700; }
 .pin-cancel { background: none; border: 1.5px solid #FFB7D5; color: #FFFFFF; border-radius: 999px; min-height: 40px; padding: 0 22px; font: inherit; cursor: pointer; }
+
+/* clear chat history: trash button in the chat header, confirm popup, empty state */
+.cv-clear { color: #FF5AA5; }
+.cv-clear .ic { color: #FF5AA5; }
+.cv-clear:hover { background: rgba(224, 36, 94, .28); }
+.btn.danger-pink { background: #E0245E; border-color: #E0245E; color: #FFFFFF; font-weight: 700; }
+.btn.danger-pink:hover:not(:disabled) { background: #C81D50; }
+.ch-scope { border: 1px solid rgba(255, 183, 213, .35); border-radius: 14px; padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+.cv-empty { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 40px 16px; text-align: center; }
+.cv-empty small { color: #D9C5D7; }

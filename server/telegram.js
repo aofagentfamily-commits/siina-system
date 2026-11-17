@@ -603,6 +603,7 @@ function ingestMessage(bot, msg) {
     const exists = db.prepare('SELECT id FROM telegram_messages WHERE group_id = ? AND message_id = ?').get(g.id, msg.message_id);
     if (exists) continue; // duplicate delivery (webhook retry / polling overlap)
     const threadId = msg.message_thread_id || null;
+    if (isHistoryCleared(user.id, g.id, msg.message_id, threadId)) continue; // cleared earlier: do not store again
     // A thread id alone does not make a topic: only a real forum group (or a topic event) lists topics.
     const isForum = !!(g.is_forum || (msg.chat && msg.chat.is_forum) || msg.forum_topic_created || msg.forum_topic_edited);
     if (msg.forum_topic_created) upsertTopic(user.id, g.id, threadId, msg.forum_topic_created.name, true);
@@ -709,6 +710,50 @@ function scheduleAutoReply(userId, groupId, messageId, text) {
 }
 
 // ---------------------------------------------------------------- chat list, messages, media
+// ---------------------------------------------------------------- clear history (SIINA SYSTEM only)
+// Clearing deletes the stored messages of one room, or of one topic, from SIINA SYSTEM and leaves a
+// high-water mark, so the same messages are not stored again when Telegram delivers them later.
+// Nothing is sent to Telegram; groups, bots, tags, topics and filters are not changed.
+function isHistoryCleared(userId, groupId, messageId, threadId) {
+  return !!db.prepare(`SELECT 1 FROM telegram_history_marks
+    WHERE user_id = ? AND group_id = ? AND ? <= upto_message_id AND (thread_id IS NULL OR thread_id IS ?) LIMIT 1`)
+    .get(userId, groupId, messageId, threadId);
+}
+
+function clearHistory(user, groupId, threadId) {
+  const g = assertUnlocked(user, getGroup(user, groupId));
+  const topic = threadId == null || threadId === '' ? null : u.int(threadId, { min: 1, field: 'หัวข้อ' });
+  const scope = topic == null ? '' : ' AND thread_id IS ?';
+  const args = topic == null ? [user.id, g.id] : [user.id, g.id, topic];
+  const summary = db.prepare(`SELECT COUNT(*) AS c, MAX(message_id) AS top FROM telegram_messages WHERE user_id = ? AND group_id = ?${scope}`).get(...args);
+  const uniqueIds = db.prepare(`SELECT attachments FROM telegram_messages WHERE user_id = ? AND group_id = ?${scope}`).all(...args)
+    .flatMap((r) => JSON.parse(r.attachments || '[]').map((a) => a.uniqueId).filter(Boolean));
+  const now = u.nowIso();
+  db.exec('BEGIN');
+  try {
+    if (summary.top != null) {
+      db.prepare('INSERT INTO telegram_history_marks (id, user_id, group_id, thread_id, upto_message_id, cleared_at) VALUES (?,?,?,?,?,?)')
+        .run(u.uid(), user.id, g.id, topic, summary.top, now);
+    }
+    db.prepare(`DELETE FROM telegram_messages WHERE user_id = ? AND group_id = ?${scope}`).run(...args);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+  // Cached media is removed only when no remaining message still uses it.
+  let removedFiles = 0;
+  for (const id of new Set(uniqueIds)) {
+    if (!/^[A-Za-z0-9_-]{1,100}$/.test(id)) continue;
+    const used = db.prepare('SELECT 1 FROM telegram_messages WHERE user_id = ? AND attachments LIKE ? LIMIT 1').get(user.id, `%"uniqueId":"${id}"%`);
+    if (used) continue;
+    try { fs.unlinkSync(path.join(DATA_DIR, 'media', id)); removedFiles += 1; } catch (_) { /* not cached */ }
+  }
+  u.activity(user.id, 'clear_history', 'telegram_group', g.id, topic == null ? 'ทั้งกลุ่ม' : 'หัวข้อ ' + topic);
+  publish(user.id, { groupId: g.id, kind: 'cleared' });
+  return { ok: true, deleted: summary.c, removedFiles };
+}
+
 function chatList(user) {
   return db.prepare(`
     SELECT g.id, g.title, g.enabled, g.status, g.bot_id, g.avatar_data, (g.lock_hash IS NOT NULL) AS is_locked,
@@ -1087,7 +1132,7 @@ module.exports = {
   listGroups, createGroup, updateGroup, deleteGroup, testGroup,
   processUpdate, pollAll, chatList, groupMessages, mentionList, markGroupRead, mediaFile,
   sendMessage, retryOutbox, outboxForGroup,
-  listFilters, createFilter, updateFilter, deleteFilter, groupTopics, renameTopic, setTopicColor, createTopic, ackMessage, setGroupTags, unlockGroup, unlockWithPassword,
+  listFilters, createFilter, updateFilter, deleteFilter, groupTopics, renameTopic, setTopicColor, createTopic, ackMessage, setGroupTags, unlockGroup, unlockWithPassword, clearHistory,
   overview, autoReplyCheck, listLogs, subscribe, sendFile, sendSticker,
   getWebhookBot: (id) => db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(id),
   publicBaseUrl,
