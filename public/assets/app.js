@@ -255,6 +255,10 @@ function renderShell() {
       <header class="topbar">
         <button class="btn icon menu-btn" data-action="toggle-sidebar" aria-label="ย่อ / ขยายเมนู">${icon('menu')}</button>
         <div class="title"><h1 id="topTitle"></h1><p id="topDesc"></p></div>
+        <div class="pop-wrap notes-wrap" id="notesWrap">
+          <button type="button" class="notes-btn" id="notesBtn" data-action="notes" aria-label="โน้ตส่วนตัว" title="โน้ตส่วนตัว" aria-expanded="false">${icon('notebook')}</button>
+          <div class="pop notes-pop" id="notesPop" hidden></div>
+        </div>
         <div class="pop-wrap" id="bellWrap">
           <button class="btn icon bell" id="bellBtn" data-action="bell" aria-label="การแจ้งเตือน" aria-expanded="false">${icon('bell')}<span class="count" id="bellCount" hidden></span></button>
           <div class="pop" id="bellPop" hidden></div>

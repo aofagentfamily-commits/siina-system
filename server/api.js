@@ -5,6 +5,7 @@ const { HttpError, logError } = require('./util');
 const auth = require('./auth');
 const f = require('./features');
 const tg = require('./telegram');
+const notes = require('./notes');
 const tpl = require('./templates');
 const { db } = require('./db');
 const u = require('./util');
@@ -62,6 +63,11 @@ add('PATCH', '/api/events/:id', (c) => f.updateEvent(c.user, c.params.id, c.body
 add('DELETE', '/api/events/:id', (c) => f.deleteEvent(c.user, c.params.id));
 
 // ---------------------------------------------------------------- notifications & summary
+add('GET', '/api/notes', (c) => ({ items: notes.listNotes(c.user, c.query) }));
+add('POST', '/api/notes', (c) => notes.createNote(c.user, c.body));
+add('GET', '/api/notes/:id', (c) => notes.getNote(c.user, c.params.id, c.query.reveal === '1'));
+add('PATCH', '/api/notes/:id', (c) => notes.updateNote(c.user, c.params.id, c.body));
+add('DELETE', '/api/notes/:id', (c) => notes.deleteNote(c.user, c.params.id));
 add('GET', '/api/notifications', (c) => ({ items: f.listNotifications(c.user, c.query) }));
 add('POST', '/api/notifications/read-all', (c) => f.markAllNotificationsRead(c.user));
 add('POST', '/api/notifications/:id/read', (c) => f.markNotificationRead(c.user, c.params.id));
