@@ -54,6 +54,7 @@ test('the room view shows the count and the names on the message', () => {
   const msg = tg.groupMessages(owner, 'g-ack', { limit: '10' }).find((m) => m.messageId === 900);
   assert.ok(msg, 'the sent message is in the room');
   assert.equal(msg.acks.count, 2);
+  assert.deepEqual(msg.buttons.map((b) => b.label), ['รับทราบ', 'เว็บ']);
   assert.deepEqual(msg.acks.names, ['สมชาย', 'สมหญิง']);
 });
 

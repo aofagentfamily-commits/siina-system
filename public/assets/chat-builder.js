@@ -342,3 +342,10 @@ function ackSummaryHtml(a) {
   const more = a.count > a.names.length ? ' และอื่น ๆ' : '';
   return `<div class="cv-acks-sum">✓ รับทราบแล้ว ${a.count} คน: ${esc(a.names.slice(0, 5).join(', '))}${more}</div>`;
 }
+
+// The buttons sent under a message, shown in the room. Links open their page; "รับทราบ" is pressed in Telegram.
+function messageButtonsHtml(list) {
+  return `<div class="cv-msg-buttons">${list.map((b) => (b.type === 'ack'
+    ? `<span class="cv-msg-btn is-ack" title="กดรับทราบได้ในแอป Telegram">${esc(b.label)}</span>`
+    : `<a class="cv-msg-btn" href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">${esc(b.label)} <span aria-hidden="true">↗</span></a>`)).join('')}</div>`;
+}

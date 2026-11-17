@@ -823,7 +823,13 @@ function withSenderBot(groupId, userId) {
     if (a.names.length < 20) a.names.push(r.from_name);
     acks.set(r.telegram_message_id, a);
   }
-  return (m) => ({ ...messageDto(m), botName: bot.name || null, botAvatar: bot.avatar_data || null, acks: acks.get(m.message_id) || null });
+  // the buttons that were sent under each message (from the outbox row that was sent)
+  const buttons = new Map();
+  for (const r of db.prepare("SELECT telegram_message_id, buttons FROM telegram_outbox WHERE group_id = ? AND user_id = ? AND buttons IS NOT NULL AND telegram_message_id IS NOT NULL").all(groupId, userId)) {
+    buttons.set(r.telegram_message_id, JSON.parse(r.buttons));
+  }
+  return (m) => ({ ...messageDto(m), botName: bot.name || null, botAvatar: bot.avatar_data || null, acks: acks.get(m.message_id) || null,
+    buttons: buttons.get(m.message_id) || null });
 }
 
 // Latest messages, older pages (before=), or a window around one message (around=) for "jump to message".
