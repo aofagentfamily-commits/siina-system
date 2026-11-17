@@ -3,12 +3,12 @@
 'use strict';
 
 const CT_PRESETS = [
-  { k: 'couple', label: 'ธีมคู่รัก', grad: 'linear-gradient(160deg,#FFD0E6,#FFE7B3 55%,#FFC9A8)', feat: true },
-  { k: 'night', label: 'ธีมกลางคืน', grad: 'linear-gradient(160deg,#3D2A6B,#6A4BA8 60%,#A88AE0)' },
-  { k: 'sea', label: 'ธีมทะเล', grad: 'linear-gradient(160deg,#9FE7F2,#FFE6B0 60%,#FFC9A0)' },
-  { k: 'sakura', label: 'ธีมซากุระ', grad: 'linear-gradient(160deg,#FFE3F0,#FFC4DD 60%,#FFB3D0)' },
-  { k: 'nature', label: 'ธีมธรรมชาติ', grad: 'linear-gradient(160deg,#D8F5CF,#A8E0A0 60%,#8ED08A)' },
-  { k: 'galaxy', label: 'ธีมกาแล็กซี', grad: 'linear-gradient(160deg,#1E1B4B,#4C2A7A 55%,#B0307F)' },
+  { k: 'couple', label: 'ธีมคู่รัก', img: 'theme-couple', feat: true },
+  { k: 'night', label: 'ธีมกลางคืน', img: 'theme-night' },
+  { k: 'sea', label: 'ธีมทะเล', img: 'theme-sea' },
+  { k: 'sakura', label: 'ธีมซากุระ', img: 'theme-sakura' },
+  { k: 'nature', label: 'ธีมธรรมชาติ', img: 'theme-nature' },
+  { k: 'galaxy', label: 'ธีมกาแล็กซี', img: 'theme-galaxy' },
 ];
 const CT_DEFAULT_OPTIONS = { primary: true, textStyle: 'dark', mascot: true, animation: true, opacity: 80 };
 const CT_CACHE = new Map(); // group id -> { theme, options }
@@ -58,7 +58,7 @@ fillPage = function (html) {
 // ---------------------------------------------------------------- right panel
 function ctPresetHtml() {
   return `<div class="ct-cards">${CT_PRESETS.map((p) => `<button type="button" class="ct-card ${CT_LIVE.theme === p.k ? 'is-on' : ''} ${p.feat ? 'is-feat' : ''}" data-action="ct-pick" data-id="${p.k}" aria-pressed="${CT_LIVE.theme === p.k}">
-      <span class="ct-thumb" style="background:${p.grad}">${p.k === 'couple' ? '<img src="/assets/theme/couple.png" alt="" width="60" height="70">' : ''}</span>
+      <span class="ct-thumb" style="background-image:url(/assets/theme/${p.img}.jpg)"></span>
       <span class="ct-card-name">${esc(p.label)}</span></button>`).join('')}</div>`;
 }
 function ctDetailHtml() {
