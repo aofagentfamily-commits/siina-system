@@ -302,6 +302,33 @@ test('telegram: ingest stores matched messages once and sends are idempotent', a
   assert.equal(withSecret.status, 200);
 });
 
+test('telegram groups: tags are saved per group and replaced in one call', async () => {
+  const created = await api('POST', '/api/telegram/groups', { botId: 'bot-test-1', title: 'กลุ่มแท็ก', chatId: '-1009998887776' });
+  assert.equal(created.status, 200);
+  const gid = created.body.id;
+  const ok = await api('PUT', `/api/telegram/groups/${gid}/tags`, { tags: [
+    { name: 'ด่วน', color: '#FFD8B5' }, { name: 'งานบัญชี', color: '#B5E6FF' },
+  ] });
+  assert.equal(ok.status, 200);
+  const list = (await api('GET', '/api/telegram/groups')).body.items.find((g) => g.id === gid);
+  assert.deepEqual(list.tags.map((t) => t.name), ['ด่วน', 'งานบัญชี']);
+  // the next save replaces the whole list
+  await api('PUT', `/api/telegram/groups/${gid}/tags`, { tags: [{ name: 'ใหม่', color: '#FFF4A8' }] });
+  const after = (await api('GET', '/api/telegram/groups')).body.items.find((g) => g.id === gid);
+  assert.deepEqual(after.tags.map((t) => t.name), ['ใหม่']);
+  // validation: duplicate names (any case), unknown colour, too many tags
+  const dup = await api('PUT', `/api/telegram/groups/${gid}/tags`, { tags: [{ name: 'A', color: '#AFC8FF' }, { name: 'a', color: '#AFC8FF' }] });
+  assert.equal(dup.status, 409);
+  const badColor = await api('PUT', `/api/telegram/groups/${gid}/tags`, { tags: [{ name: 'X', color: '#000000' }] });
+  assert.equal(badColor.status, 400);
+  const many = Array.from({ length: 21 }, (_, i) => ({ name: 'T' + i, color: '#AFC8FF' }));
+  const tooMany = await api('PUT', `/api/telegram/groups/${gid}/tags`, { tags: many });
+  assert.equal(tooMany.status, 400);
+  // tags are not part of the chat id or the group's identity
+  const still = (await api('GET', '/api/telegram/groups')).body.items.find((g) => g.id === gid);
+  assert.equal(still.chatId, '-1009998887776');
+});
+
 test('export excludes bot tokens and logs record activity', async () => {
   const exp = await api('GET', '/api/export');
   assert.equal(exp.status, 200);

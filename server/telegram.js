@@ -208,18 +208,62 @@ async function setWebhookForUser(user, id) {
 }
 
 // ---------------------------------------------------------------- groups
+const GROUP_TAG_COLORS = ['#AFC8FF', '#B5E6FF', '#B8F2D5', '#FFFFFF', '#FFD8B5', '#FFF4A8'];
+
 function groupDto(g) {
   return {
     id: g.id, botId: g.bot_id || null, botName: g.bot_name || null, previousBotId: g.previous_bot_id || null,
+    tags: g.tags || [],
     title: g.title, chatId: g.chat_id, enabled: !!g.enabled, autoReply: !!g.auto_reply,
     avatarData: g.avatar_data || null, status: g.bot_id ? g.status : 'unlinked',
     lastError: g.last_error, lastTestedAt: g.last_tested_at, createdAt: g.created_at, updatedAt: g.updated_at,
   };
 }
 
+function tagsByGroup(userId) {
+  const map = new Map();
+  for (const t of db.prepare('SELECT id, group_id, name, color FROM telegram_group_tags WHERE user_id = ? ORDER BY created_at').all(userId)) {
+    if (!map.has(t.group_id)) map.set(t.group_id, []);
+    map.get(t.group_id).push({ id: t.id, name: t.name, color: t.color });
+  }
+  return map;
+}
+
 function listGroups(user) {
+  const tags = tagsByGroup(user.id);
   return db.prepare(`SELECT g.*, b.name AS bot_name FROM telegram_groups g
-    LEFT JOIN telegram_bots b ON b.id = g.bot_id WHERE g.user_id = ? ORDER BY g.title`).all(user.id).map(groupDto);
+    LEFT JOIN telegram_bots b ON b.id = g.bot_id WHERE g.user_id = ? ORDER BY g.title`).all(user.id)
+    .map((g) => groupDto({ ...g, tags: tags.get(g.id) || [] }));
+}
+
+// Replaces all tags of one group in a single transaction. Tags are for the app only (never sent to Telegram).
+function setGroupTags(user, groupId, list) {
+  const g = getGroup(user, groupId);
+  if (!Array.isArray(list)) throw new u.HttpError(400, 'รูปแบบแท็กไม่ถูกต้อง', 'VALIDATION');
+  if (list.length > 20) throw new u.HttpError(400, 'แท็กในกลุ่มเดียวกันมากที่สุด 20 แท็ก', 'VALIDATION');
+  const clean = [];
+  const seen = new Set();
+  for (const t of list) {
+    const name = u.str(t && t.name, { max: 30, required: true, field: 'ชื่อแท็ก' });
+    if (!GROUP_TAG_COLORS.includes(t.color)) throw new u.HttpError(400, 'สีแท็กไม่ถูกต้อง', 'VALIDATION');
+    const key = name.toLowerCase();
+    if (seen.has(key)) throw new u.HttpError(409, `มีแท็ก “${name}” อยู่แล้วในกลุ่มนี้`, 'DUPLICATE');
+    seen.add(key);
+    clean.push({ name, color: t.color });
+  }
+  const now = u.nowIso();
+  db.exec('BEGIN');
+  try {
+    db.prepare('DELETE FROM telegram_group_tags WHERE group_id = ? AND user_id = ?').run(g.id, user.id);
+    const insert = db.prepare('INSERT INTO telegram_group_tags (id, user_id, group_id, name, color, created_at, updated_at) VALUES (?,?,?,?,?,?,?)');
+    for (const t of clean) insert.run(u.uid(), user.id, g.id, t.name, t.color, now, now);
+    db.exec('COMMIT');
+  } catch (err) {
+    db.exec('ROLLBACK');
+    throw err;
+  }
+  u.activity(user.id, 'update', 'telegram_group', g.id, `แท็ก ${clean.length} รายการ`);
+  return { ok: true, tags: clean };
 }
 
 function getGroup(user, id) {
@@ -889,7 +933,7 @@ module.exports = {
   listGroups, createGroup, updateGroup, deleteGroup, testGroup,
   processUpdate, pollAll, chatList, groupMessages, mentionList, markGroupRead, mediaFile,
   sendMessage, retryOutbox, outboxForGroup,
-  listFilters, createFilter, updateFilter, deleteFilter, groupTopics, renameTopic, ackMessage,
+  listFilters, createFilter, updateFilter, deleteFilter, groupTopics, renameTopic, ackMessage, setGroupTags,
   overview, autoReplyCheck, listLogs, subscribe, sendFile, sendSticker,
   getWebhookBot: (id) => db.prepare('SELECT * FROM telegram_bots WHERE id = ?').get(id),
   publicBaseUrl,

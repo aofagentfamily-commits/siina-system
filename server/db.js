@@ -224,6 +224,17 @@ CREATE TABLE IF NOT EXISTS telegram_topics (
   UNIQUE(group_id, thread_id)
 );
 
+CREATE TABLE IF NOT EXISTS telegram_group_tags (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  group_id TEXT NOT NULL REFERENCES telegram_groups(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  color TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_grouptags_group ON telegram_group_tags(group_id);
+
 CREATE TABLE IF NOT EXISTS telegram_templates (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
