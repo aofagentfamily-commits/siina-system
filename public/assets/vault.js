@@ -25,7 +25,7 @@ function vaultLetter(title) {
 function vaultFiltered() {
   const q = VAULT.q.trim().toLowerCase();
   return VAULT.items.filter((i) => (VAULT.cat === 'all' || i.categoryId === VAULT.cat)
-    && (!q || (i.title + ' ' + i.login + ' ' + i.url).toLowerCase().includes(q)));
+    && (!q || (i.title + ' ' + vaultCatName(i.categoryId)).toLowerCase().includes(q)));
 }
 // The picture of an entry (or its first letter). The detail picture opens the picture editor.
 function vaultAvatarHtml(it, big) {
@@ -63,25 +63,18 @@ function vaultCatsPanelHtml() {
 
 function vaultTableHtml() {
   const rows = vaultFiltered();
-  const body = rows.length ? rows.map((i) => `
-    <tr class="vault-row ${VAULT.sel === i.id ? 'is-sel' : ''}" data-action="vault-select" data-id="${esc(i.id)}" tabindex="0">
-      <td class="vault-name">${vaultAvatarHtml(i, false)}
-        <span><b class="ellipsis">${esc(i.title)}</b><small class="ellipsis">${esc(i.url || '')}</small></span></td>
-      <td class="vault-login ellipsis">${esc(i.login || '—')}</td>
-      <td><span class="vault-cat-pill" style="background:${esc(vaultCatColor(i.categoryId))}">${esc(vaultCatName(i.categoryId))}</span></td>
-      <td class="vault-date">${esc(vaultDate(i.updatedAt))}</td>
-      <td><button class="vault-star ${i.starred ? 'is-on' : ''}" data-action="vault-star" data-id="${esc(i.id)}" aria-pressed="${i.starred}" aria-label="รายการโปรด">${icon('star', 'sm')}</button></td>
-    </tr>`).join('') : `<tr><td colspan="5" class="vault-empty">${VAULT.items.length ? 'ไม่พบรายการที่ตรงกับการค้นหา' : 'ยังไม่มีข้อมูล กดเพิ่มข้อมูลเพื่อเริ่มต้น'}</td></tr>`;
+  const body = rows.length ? rows.map((i) => vaultRowHtml(i)).join('')
+    : `<tr><td colspan="4" class="vault-empty">${VAULT.items.length ? 'ไม่พบรายการที่ตรงกับการค้นหา' : 'ยังไม่มีข้อมูล กดเพิ่มข้อมูลเพื่อเริ่มต้น'}</td></tr>`;
   return `<div class="vault-table-head">
       <b>รายการข้อมูลการเข้าสู่ระบบ <span class="vault-muted">(${VAULT.items.length} รายการ)</span></b>
       <div class="vault-tools">
         <label class="vault-search">${icon('search', 'sm')}<span class="sr-only">ค้นหา</span>
-          <input type="search" placeholder="ค้นหาชื่อเว็บ อีเมล หมายเหตุ..." data-input="vault-search" value="${esc(VAULT.q)}"></label>
+          <input type="search" placeholder="ค้นหาชื่อรายการ หรือหมวดหมู่..." data-input="vault-search" value="${esc(VAULT.q)}"></label>
         <button class="vault-add" data-action="vault-new">${icon('plus', 'sm')} เพิ่มข้อมูล</button>
       </div>
     </div>
     <div class="vault-table-wrap"><table class="vault-table">
-      <thead><tr><th>ชื่อรายการ</th><th>บัญชี (อีเมล/ชื่อผู้ใช้)</th><th>หมวด</th><th>อัปเดตล่าสุด</th><th></th></tr></thead>
+      <thead><tr><th>ชื่อรายการ</th><th>หมวด</th><th>เปิดลิงก์</th><th><span class="sr-only">จัดการ</span></th></tr></thead>
       <tbody id="vaultRows">${body}</tbody>
     </table></div>`;
 }
@@ -139,16 +132,50 @@ function vaultRefreshTable() {
   const t = document.getElementById('vaultRows');
   if (t) t.innerHTML = vaultFiltered().length ? vaultFiltered().map((i) => vaultRowHtml(i)).join('') : `<tr><td colspan="5" class="vault-empty">ไม่พบรายการที่ตรงกับการค้นหา</td></tr>`;
 }
+// Only http and https links are opened; an entry without a link gets a disabled button.
+function vaultLinkHtml(i) {
+  if (i.url && /^https?:\/\//i.test(i.url)) {
+    return `<a class="vault-open" href="${esc(i.url)}" target="_blank" rel="noopener noreferrer" aria-label="เปิด ${esc(i.title)}">${icon('external', 'sm')} เปิด</a>`;
+  }
+  return `<span class="vault-open is-off" aria-disabled="true" title="รายการนี้ยังไม่ได้เพิ่มลิงก์">${icon('external', 'sm')} เปิด</span>`;
+}
 function vaultRowHtml(i) {
   return `<tr class="vault-row ${VAULT.sel === i.id ? 'is-sel' : ''}" data-action="vault-select" data-id="${esc(i.id)}" tabindex="0">
-    <td class="vault-name">${vaultAvatarHtml(i, false)}
-      <span><b class="ellipsis">${esc(i.title)}</b><small class="ellipsis">${esc(i.url || '')}</small></span></td>
-    <td class="vault-login ellipsis">${esc(i.login || '—')}</td>
+    <td class="vault-name">${vaultAvatarHtml(i, false)}<span><b class="ellipsis">${esc(i.title)}</b></span></td>
     <td><span class="vault-cat-pill" style="background:${esc(vaultCatColor(i.categoryId))}">${esc(vaultCatName(i.categoryId))}</span></td>
-    <td class="vault-date">${esc(vaultDate(i.updatedAt))}</td>
-    <td><button class="vault-star ${i.starred ? 'is-on' : ''}" data-action="vault-star" data-id="${esc(i.id)}" aria-pressed="${i.starred}" aria-label="รายการโปรด">${icon('star', 'sm')}</button></td>
+    <td>${vaultLinkHtml(i)}</td>
+    <td class="vault-more-cell"><button type="button" class="vault-more" data-action="vault-more" data-id="${esc(i.id)}" aria-haspopup="menu" aria-label="เมนูจัดการ ${esc(i.title)}">⋮</button></td>
   </tr>`;
 }
+
+// ⋮ menu: edit, copy (login, password), delete. Opened in place; closes on any other click.
+let vaultMenuEl = null;
+function closeVaultMenu() {
+  if (vaultMenuEl) { vaultMenuEl.remove(); vaultMenuEl = null; }
+}
+ACTIONS['vault-more'] = (el) => {
+  closeVaultMenu();
+  const id = el.dataset.id;
+  const r = el.getBoundingClientRect();
+  const m = document.createElement('div');
+  m.className = 'vault-menu';
+  m.setAttribute('role', 'menu');
+  m.innerHTML = `
+    <button type="button" role="menuitem" data-action="vault-edit" data-id="${esc(id)}">${icon('edit', 'sm')} แก้ไข</button>
+    <button type="button" role="menuitem" data-action="vault-copy-login" data-id="${esc(id)}">${icon('copy', 'sm')} คัดลอกอีเมล</button>
+    <button type="button" role="menuitem" data-action="vault-copy-pw" data-id="${esc(id)}">${icon('copy', 'sm')} คัดลอกรหัสผ่าน</button>
+    <button type="button" role="menuitem" class="danger" data-action="vault-delete" data-id="${esc(id)}">${icon('trash2', 'sm')} ลบ</button>`;
+  m.style.top = Math.min(r.bottom + 6, window.innerHeight - 200) + 'px';
+  m.style.left = Math.max(8, Math.min(r.right - 200, window.innerWidth - 210)) + 'px';
+  document.body.appendChild(m);
+  vaultMenuEl = m;
+};
+document.addEventListener('click', (e) => {
+  if (!vaultMenuEl) return;
+  if (e.target.closest && e.target.closest('[data-action="vault-more"]')) return;
+  closeVaultMenu();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeVaultMenu(); });
 
 async function renderVault() {
   setPageHead('ข้อมูลการเข้าสู่ระบบ', 'จัดเก็บอีเมล รหัสผ่าน และข้อมูลสำคัญสำหรับการเข้าสู่ระบบอย่างปลอดภัย');

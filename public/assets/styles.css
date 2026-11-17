@@ -1756,7 +1756,7 @@ body[data-route="shop"] .app { display: block !important; }
 .vault-search input { border: 0; outline: none; background: transparent; font: inherit; flex: 1; min-width: 0; color: var(--v-text); }
 .vault-add { display: inline-flex; align-items: center; gap: 6px; min-height: 42px; padding: 0 18px; border-radius: 999px; border: 0; background: var(--v-pink); color: #FFFFFF; font: inherit; font-weight: 700; cursor: pointer; box-shadow: 0 8px 18px rgba(255, 105, 172, .35); }
 .vault-table-wrap { overflow-x: auto; }
-.vault-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; min-width: 620px; }
+.vault-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; min-width: 460px; }
 .vault-table th { text-align: left; color: var(--v-muted); font-weight: 700; padding: 10px 8px; border-bottom: 1px solid var(--v-border); background: var(--v-panel); }
 .vault-table th:first-child { border-radius: 12px 0 0 0; }
 .vault-table th:last-child { border-radius: 0 12px 0 0; }
@@ -1822,3 +1822,15 @@ body[data-route="shop"] .app { display: block !important; }
 .vault-avatar-btn { border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--v-text); transition: box-shadow .2s ease, transform .15s ease; }
 .vault-avatar-btn:hover { box-shadow: 0 0 0 3px var(--v-pink2), 0 0 0 5px var(--v-pink); transform: translateY(-1px); }
 .vault-letter-fallback { font-size: 1.3rem; font-weight: 800; color: #30213A; }
+
+.vault-open { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 16px; border-radius: 999px; background: #FF5AA5; color: #FFFFFF; font-weight: 700; text-decoration: none; box-shadow: 0 6px 14px rgba(255, 90, 165, .3); transition: transform .15s ease, box-shadow .2s ease; white-space: nowrap; }
+.vault-open:hover { transform: translateY(-1px); box-shadow: 0 10px 18px rgba(255, 90, 165, .4); }
+.vault-open .ic { width: 15px; height: 15px; }
+.vault-open.is-off { background: #EFEAF0; color: #9A8FA0; box-shadow: none; cursor: not-allowed; transform: none; }
+.vault-more { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid var(--v-border); background: var(--v-card); color: var(--v-pink); font-size: 20px; line-height: 1; cursor: pointer; padding: 0; }
+.vault-more:hover { background: var(--v-pink2); }
+.vault-more-cell { text-align: right; width: 56px; }
+.vault-menu { position: fixed; z-index: 95; min-width: 190px; display: flex; flex-direction: column; padding: 6px; border-radius: 16px; background: #FFFFFF; border: 1px solid var(--v-border); box-shadow: 0 14px 30px rgba(255, 105, 172, .2); }
+.vault-menu button { display: flex; align-items: center; gap: 8px; text-align: left; background: none; border: 0; padding: 9px 12px; border-radius: 10px; font: inherit; color: #30213A; cursor: pointer; }
+.vault-menu button:hover { background: #FFF0F8; }
+.vault-menu button.danger { color: #D6336C; }
