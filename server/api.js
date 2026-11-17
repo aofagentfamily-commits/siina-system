@@ -8,6 +8,7 @@ const tg = require('./telegram');
 const notes = require('./notes');
 const privacy = require('./privacy');
 const vault = require('./vault');
+const live = require('./live');
 const categories = require('./categories');
 const tpl = require('./templates');
 const { db } = require('./db');
@@ -57,6 +58,14 @@ add('PATCH', '/api/me', (c) => ({ user: f.updateProfile(c.user, c.body) }));
 add('GET', '/api/settings', (c) => ({ settings: f.getSettings(c.user.id) }));
 add('PUT', '/api/settings', (c) => ({ settings: f.updateSettings(c.user, c.body) }));
 add('GET', '/api/dashboard', (c) => f.dashboard(c.user));
+add('GET', '/api/dashboard/prefs', (c) => live.prefs(c.user));
+add('PUT', '/api/dashboard/prefs', (c) => live.setPrefs(c.user, c.body));
+add('GET', '/api/dashboard/weather', (c) => live.weather(c.user));
+add('GET', '/api/dashboard/places', (c) => live.placeSearch(c.query.q));
+add('GET', '/api/dashboard/news', (c) => live.news(c.user));
+add('GET', '/api/dashboard/gold', (c) => live.goldLatest(c.user));
+add('POST', '/api/dashboard/gold', (c) => live.goldAdd(c.user, c.body));
+add('POST', '/api/dashboard/tasks/:id/done', (c) => live.setTaskDone(c.user, c.params.id, c.body.done !== false));
 
 // ---------------------------------------------------------------- projects
 add('GET', '/api/projects', (c) => ({ items: f.listProjects(c.user, c.query) }));

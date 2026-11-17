@@ -298,6 +298,27 @@ CREATE TABLE IF NOT EXISTS vault_items (
 );
 CREATE INDEX IF NOT EXISTS idx_vault_items_user ON vault_items(user_id, title);
 
+-- Home page widgets: preferences per account and gold prices entered with their source
+CREATE TABLE IF NOT EXISTS dashboard_prefs (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  weather_place TEXT,
+  news_topics TEXT,
+  news_limit INTEGER NOT NULL DEFAULT 5,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS gold_prices (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day TEXT NOT NULL,
+  bar_buy INTEGER NOT NULL,
+  bar_sell INTEGER NOT NULL,
+  jewel_buy INTEGER NOT NULL,
+  jewel_sell INTEGER NOT NULL,
+  source TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gold_user ON gold_prices(user_id, created_at);
+
 CREATE TABLE IF NOT EXISTS telegram_group_tags (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

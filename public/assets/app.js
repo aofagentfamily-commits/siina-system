@@ -11,7 +11,7 @@ const NAV = [
   { k: 'settings', label: 'ตั้งค่า', i: 'settings' },
 ];
 const PAGES = {
-  shop: renderShop, home: renderHome, chat: renderChat, projects: renderProjects,
+  shop: renderShop, home: renderHomeDash, chat: renderChat, projects: renderProjects,
   calendar: renderCalendar, summary: renderSummary, vault: renderVault, settings: renderSettings,
 };
 const LOGIN_TILES = [
