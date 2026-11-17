@@ -1702,3 +1702,6 @@ body[data-route="shop"] .app { display: block !important; }
   .cafe-cart-line .cafe-qty, .cafe-cart-line .cafe-cart-sum { grid-column: 2; }
   .cafe-form-grid { grid-template-columns: 1fr; }
 }
+
+.cat-form-foot { justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.cat-form-btns { display: flex; gap: 10px; }

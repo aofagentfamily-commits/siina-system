@@ -84,8 +84,9 @@ async function openCatForm(id) {
           : '<p class="muted small">ยังไม่มีกลุ่ม Telegram</p>'}</div>
       </div>
       <p class="small" data-role="form-error"></p>
-      <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-action="close-modal">ยกเลิก</button>
-        <button type="submit" class="btn primary">บันทึก</button></div>
+      <div class="row cat-form-foot">${cat ? `<button type="button" class="btn danger" data-action="cat-delete" data-id="${esc(cat.id)}">${icon('trash2', 'sm')} ลบหมวด</button>` : '<span></span>'}
+        <span class="cat-form-btns"><button type="button" class="btn ghost" data-action="close-modal">ยกเลิก</button>
+        <button type="submit" class="btn primary">บันทึก</button></span></div>
     </form>`,
   });
 }
@@ -174,11 +175,13 @@ function openCatMenu(catId, x, y) {
   document.body.appendChild(m);
   catMenuEl = m;
 }
+// Right-click a category icon: opens its edit popup (name, icon, colour, rooms, delete).
 document.addEventListener('contextmenu', (e) => {
   const el = e.target.closest && e.target.closest('.cat-dot[data-cat-id]');
   if (!el) return;
   e.preventDefault();
-  openCatMenu(el.dataset.catId, e.clientX, e.clientY);
+  closeCatMenu();
+  openCatForm(el.dataset.catId);
 });
 let catPressTimer = 0;
 let catPressSuppressClick = false;
@@ -188,7 +191,7 @@ document.addEventListener('pointerdown', (e) => {
   clearTimeout(catPressTimer);
   catPressTimer = setTimeout(() => {
     catPressSuppressClick = true;
-    openCatMenu(el.dataset.catId, e.clientX, e.clientY);
+    openCatForm(el.dataset.catId);
   }, 500);
 });
 ['pointerup', 'pointercancel', 'pointerleave'].forEach((type) => document.addEventListener(type, () => clearTimeout(catPressTimer)));
