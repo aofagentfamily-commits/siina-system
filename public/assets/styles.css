@@ -1798,7 +1798,8 @@ body[data-route="shop"] .app { display: block !important; }
 .modal.vault-modal header h2 { color: #30213A; }
 .modal.vault-modal .field span, .modal.vault-modal label span { color: #5C4A66; font-weight: 700; }
 .modal.vault-modal .input, .modal.vault-modal .select, .modal.vault-modal .textarea { background: #FFFFFF; color: #30213A; border: 1.5px solid var(--v-border); }
-.modal.vault-modal .btn.primary { background: var(--v-pink); border-color: var(--v-pink); color: #FFFFFF; }
+.modal.vault-modal .btn.primary { background: #5B2D8E; border-color: #5B2D8E; color: #FFFFFF; font-weight: 700; box-shadow: 0 8px 18px rgba(91, 45, 142, .35); }
+.modal.vault-modal .btn.primary:hover:not(:disabled) { background: #4A2275; }
 .modal.vault-modal .btn.ghost { color: #5C4A66; }
 .modal.vault-modal .btn.danger { background: #FFE3EE; color: #B0264E; border-color: #F7B6D0; }
 .modal.vault-modal .vault-muted, .modal.vault-modal p.small { color: var(--v-muted); }
