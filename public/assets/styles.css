@@ -1816,3 +1816,9 @@ body[data-route="shop"] .app { display: block !important; }
   .vault-add { width: 100%; justify-content: center; }
   .vault-login { max-width: 140px; }
 }
+
+.vault-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
+.vault-avatar { overflow: hidden; }
+.vault-avatar-btn { border: 0; padding: 0; cursor: pointer; font: inherit; color: var(--v-text); transition: box-shadow .2s ease, transform .15s ease; }
+.vault-avatar-btn:hover { box-shadow: 0 0 0 3px var(--v-pink2), 0 0 0 5px var(--v-pink); transform: translateY(-1px); }
+.vault-letter-fallback { font-size: 1.3rem; font-weight: 800; color: #30213A; }

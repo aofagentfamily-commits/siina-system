@@ -27,6 +27,13 @@ function vaultFiltered() {
   return VAULT.items.filter((i) => (VAULT.cat === 'all' || i.categoryId === VAULT.cat)
     && (!q || (i.title + ' ' + i.login + ' ' + i.url).toLowerCase().includes(q)));
 }
+// The picture of an entry (or its first letter). The detail picture opens the picture editor.
+function vaultAvatarHtml(it, big) {
+  const cls = big ? 'vault-avatar big' : 'vault-avatar';
+  const inner = it.avatarData ? `<img src="${esc(it.avatarData)}" alt="">` : vaultLetter(it.title);
+  if (!big) return `<span class="${cls}">${inner}</span>`;
+  return `<button type="button" class="${cls} vault-avatar-btn" data-action="vault-avatar" data-id="${esc(it.id)}" aria-label="เปลี่ยนรูปโปรไฟล์" title="กดเพื่อเปลี่ยนรูป">${inner}</button>`;
+}
 function vaultDate(iso) {
   return iso ? fmtDateTime(iso) : '';
 }
@@ -58,7 +65,7 @@ function vaultTableHtml() {
   const rows = vaultFiltered();
   const body = rows.length ? rows.map((i) => `
     <tr class="vault-row ${VAULT.sel === i.id ? 'is-sel' : ''}" data-action="vault-select" data-id="${esc(i.id)}" tabindex="0">
-      <td class="vault-name"><span class="vault-avatar">${vaultLetter(i.title)}</span>
+      <td class="vault-name">${vaultAvatarHtml(i, false)}
         <span><b class="ellipsis">${esc(i.title)}</b><small class="ellipsis">${esc(i.url || '')}</small></span></td>
       <td class="vault-login ellipsis">${esc(i.login || '—')}</td>
       <td><span class="vault-cat-pill" style="background:${esc(vaultCatColor(i.categoryId))}">${esc(vaultCatName(i.categoryId))}</span></td>
@@ -83,7 +90,7 @@ function vaultDetailHtml() {
   const it = VAULT.items.find((i) => i.id === VAULT.sel);
   if (!it) return `<div class="vault-detail-empty">${icon('lock')}<b>เลือกรายการเพื่อดูรายละเอียด</b><small class="vault-muted">รหัสผ่านจะไม่แสดงจนกว่าคุณจะกดดู</small></div>`;
   return `<div class="vault-detail-head">
-      <span class="vault-avatar big">${vaultLetter(it.title)}</span>
+      ${vaultAvatarHtml(it, true)}
       <div class="grow"><h3>${esc(it.title)}</h3><span class="vault-cat-pill" style="background:${esc(vaultCatColor(it.categoryId))}">${esc(vaultCatName(it.categoryId))}</span></div>
       <div class="vault-detail-tools">
         <button class="vault-icon-btn ${it.starred ? 'is-on' : ''}" data-action="vault-star" data-id="${esc(it.id)}" aria-label="รายการโปรด">${icon('star', 'sm')}</button>
@@ -134,7 +141,7 @@ function vaultRefreshTable() {
 }
 function vaultRowHtml(i) {
   return `<tr class="vault-row ${VAULT.sel === i.id ? 'is-sel' : ''}" data-action="vault-select" data-id="${esc(i.id)}" tabindex="0">
-    <td class="vault-name"><span class="vault-avatar">${vaultLetter(i.title)}</span>
+    <td class="vault-name">${vaultAvatarHtml(i, false)}
       <span><b class="ellipsis">${esc(i.title)}</b><small class="ellipsis">${esc(i.url || '')}</small></span></td>
     <td class="vault-login ellipsis">${esc(i.login || '—')}</td>
     <td><span class="vault-cat-pill" style="background:${esc(vaultCatColor(i.categoryId))}">${esc(vaultCatName(i.categoryId))}</span></td>
@@ -335,4 +342,21 @@ ACTIONS['vault-cat-del'] = async (el) => {
     closeAllModals();
     vaultRefreshAll();
   } catch (err) { toast(err.message, 'err'); }
+};
+
+// Changing the picture of an entry: the same editor as the group pictures; removing it returns the letter.
+ACTIONS['vault-avatar'] = (el) => {
+  const it = VAULT.items.find((i) => i.id === el.dataset.id);
+  if (!it) return;
+  openAvatarEditor({
+    title: 'รูปโปรไฟล์รายการ',
+    current: it.avatarData,
+    fallback: `<span class="vault-letter-fallback">${vaultLetter(it.title)}</span>`,
+    onSave: async (data) => {
+      await apiPatch('/api/vault/' + it.id, { avatarData: data });
+      await vaultLoad();
+      vaultRefreshAll();
+      toast(data ? 'เปลี่ยนรูปโปรไฟล์แล้ว' : 'ลบรูปโปรไฟล์แล้ว');
+    },
+  });
 };
