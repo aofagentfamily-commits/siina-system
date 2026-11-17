@@ -234,7 +234,7 @@ function attachmentsHtml(m, src) {
     const idx = m.attachments.indexOf(a);
     const url = `/api/telegram/media/${encodeURIComponent(m.id)}/${idx}`;
     if (!a.hasFile) return `<span class="cv-file">${icon('file', 'sm')} ${esc(a.name || a.type)}</span>`;
-    if (a.type === 'photo' || (a.type === 'sticker' && a.mime === 'image/webp')) return `<img class="cv-media" loading="lazy" src="${url}" alt="${esc(a.name)}">`;
+    if (a.type === 'photo' || (a.type === 'sticker' && a.mime === 'image/webp')) return `<img class="cv-media cv-zoomable" data-zoom="${url}" loading="lazy" src="${url}" alt="${esc(a.name)}" title="กดเพื่อดูรูปขนาดใหญ่">`;
     if (a.type === 'animation') return `<video class="cv-media" src="${url}" autoplay loop muted playsinline aria-label="${esc(a.name)}"></video>`;
     if (a.type === 'video' || (a.type === 'sticker' && a.mime === 'video/webm')) return `<video class="cv-media" src="${url}" controls preload="metadata"></video>`;
     if (a.type === 'voice' || a.type === 'audio') return `<audio class="cv-audio" controls preload="none" src="${url}"></audio>`;

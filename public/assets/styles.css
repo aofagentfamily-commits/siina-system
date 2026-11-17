@@ -1988,3 +1988,9 @@ body[data-route="shop"] .app { display: block !important; }
 .cv-msg-btn { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 8px 12px; border-radius: 12px; background: #F2EEF6; color: #1E1624; font-weight: 700; text-decoration: none; text-align: center; border: 1px solid #DCCFE6; }
 .cv-msg-btn:hover { background: #FFE3F1; border-color: #FF8FC4; }
 .cv-msg-btn.is-ack { cursor: default; background: #E6F7EE; border-color: #B9E6CE; color: #1E5C3E; }
+
+.cv-zoomable { cursor: zoom-in; transition: transform .15s ease, box-shadow .2s ease; }
+.cv-zoomable:hover { box-shadow: 0 0 0 2px rgba(255, 255, 255, .45); }
+.zoom-wrap { display: flex; align-items: center; justify-content: center; max-height: 78vh; overflow: auto; }
+.zoom-img { max-width: 100%; max-height: 76vh; width: auto; height: auto; object-fit: contain; border-radius: 14px; }
+.zoom-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 12px; flex-wrap: wrap; }

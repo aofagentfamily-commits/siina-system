@@ -349,3 +349,18 @@ function messageButtonsHtml(list) {
     ? `<span class="cv-msg-btn is-ack" title="กดรับทราบได้ในแอป Telegram">${esc(b.label)}</span>`
     : `<a class="cv-msg-btn" href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">${esc(b.label)} <span aria-hidden="true">↗</span></a>`)).join('')}</div>`;
 }
+
+// Click a photo in the room: it opens large in a popup, with a download link.
+document.addEventListener('click', (e) => {
+  const img = e.target.closest && e.target.closest('img.cv-zoomable');
+  if (!img) return;
+  e.preventDefault();
+  const url = img.dataset.zoom || img.src;
+  openModal({
+    title: 'รูปภาพ',
+    wide: true,
+    body: `<div class="zoom-wrap"><img class="zoom-img" src="${esc(url)}" alt="${esc(img.alt || 'รูปภาพ')}"></div>
+      <div class="zoom-foot"><a class="btn" href="${esc(url)}" download>${icon('download', 'sm')} บันทึกรูป</a>
+      <button type="button" class="btn ghost" data-action="close-modal">ปิด</button></div>`,
+  });
+});
