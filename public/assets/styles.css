@@ -1349,3 +1349,25 @@ body[data-route="calendar"] .modal .btn.primary { color: #FFFFFF; }
   font: inherit; font-weight: 700; font-size: 1.05rem; cursor: pointer; box-shadow: 0 10px 24px rgba(255, 90, 165, .35);
 }
 .pin-forgot { background: none; border: 0; color: #FFB7D5; text-decoration: underline; font: inherit; cursor: pointer; }
+
+/* room lock v2: switches (pink track, blue frame, lock inside) and popup section */
+.tgg-switches { display: flex; align-items: center; gap: 8px; flex: none; }
+.tgg-switch {
+  position: relative; display: inline-flex; align-items: center; width: 56px; height: 30px; flex: none; padding: 0;
+  border-radius: 999px; border: 2px solid #3B82F6; background: #5A3A5F; box-shadow: 0 0 0 1px rgba(59, 130, 246, .3);
+  cursor: pointer; transition: background .2s ease;
+}
+.tgg-switch input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+.tgg-switch .knob {
+  position: absolute; top: 2px; left: 2px; width: 22px; height: 22px; border-radius: 50%; background: #FFFFFF; color: #FF5AA5;
+  display: grid; place-items: center; transition: transform .2s ease;
+}
+.tgg-switch .knob .ic { width: 13px; height: 13px; }
+.tgg-switch[aria-checked="true"], .tgg-switch:has(input:checked) { background: #FF5AA5; }
+.tgg-switch[aria-checked="true"] .knob, .tgg-switch:has(input:checked) .knob { transform: translateX(24px); }
+.tgg-lock-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.tgg-lock-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.tgg-lock-fields { display: flex; flex-direction: column; gap: 8px; }
+.tgg-lock-fields > div[hidden], .tgg-change[hidden], .tgg-check[hidden] { display: none; }
+.tgg-pin-field input { letter-spacing: 6px; text-align: center; font-weight: 700; }
+.pin-cancel { background: none; border: 1.5px solid #FFB7D5; color: #FFFFFF; border-radius: 999px; min-height: 40px; padding: 0 22px; font: inherit; cursor: pointer; }

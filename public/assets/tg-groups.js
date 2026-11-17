@@ -41,14 +41,14 @@ function tgGroupCard(g) {
         <p>Chat ID</p>
         <p class="tgg-id">${esc(g.chatId)}</p>
       </div>
-      <label class="switch" title="เปิด / ปิดการติดตาม"><input type="checkbox" data-change="tg-group-toggle" data-id="${esc(g.id)}" ${g.enabled ? 'checked' : ''}><span></span></label>
+      <div class="tgg-switches">${tgGroupLockSwitch(g)}<label class="switch" title="เปิด / ปิดการติดตาม"><input type="checkbox" data-change="tg-group-toggle" data-id="${esc(g.id)}" ${g.enabled ? 'checked' : ''}><span></span></label></div>
     </header>
     <dl class="tgg-meta">
       <dt>บอทที่เชื่อมต่อ</dt><dd>${unlinked ? '<span class="tgg-muted">ยังไม่ได้เชื่อมต่อบอท</span>' : esc(g.botName)}</dd>
       <dt>สถานะ</dt><dd><span class="tgg-pill ${st[1]}">${esc(st[0])}</span></dd>
       <dt>การติดตาม</dt><dd>${g.enabled ? 'เปิดอยู่' : 'ปิดอยู่'}</dd>
       <dt>ตอบรับอัตโนมัติ</dt><dd>${g.autoReply ? 'เปิด' : 'ปิด'}</dd>
-      <dt>การล็อกห้อง</dt><dd>${g.locked ? '<span class="tgg-pill warn">ล็อกด้วยรหัส 6 ตัว</span>' : 'ไม่ได้ล็อก'}</dd>
+      <dt>การล็อกห้อง</dt><dd>${g.locked ? '🔒 ล็อกอยู่' : '🔓 ไม่ได้ล็อก'}</dd>
     </dl>
     <div class="tgg-tags-label">แท็ก</div>
     <div class="tgg-tags">${tags || '<span class="tgg-muted">ยังไม่มีแท็ก</span>'}</div>
@@ -102,14 +102,7 @@ function groupForm(group, bots, focusBot) {
       <label class="tgg-check"><input type="checkbox" name="enabled" ${!group || group.enabled ? 'checked' : ''}> เปิดการติดตามกลุ่มนี้</label>
       ${isNew ? '' : `<label class="tgg-check"><input type="checkbox" name="autoReply" ${group.autoReply ? 'checked' : ''}> ตอบรับอัตโนมัติในกลุ่มนี้</label>`}
 
-      ${isNew ? '' : `<section class="tgg-lock">
-        <label class="tgg-check"><input type="checkbox" name="lockOn" ${group && group.locked ? 'checked' : ''}> ล็อกห้องแชทด้วยรหัส 6 ตัว</label>
-        <div class="tgg-lock-pin" ${group && group.locked ? '' : 'hidden'}>
-          <input class="input" name="lockPin" inputmode="numeric" maxlength="6" autocomplete="off"
-            placeholder="${group && group.locked ? 'ใส่รหัสใหม่เพื่อเปลี่ยน (เว้นว่างไว้ = ใช้รหัสเดิม)' : 'ตั้งรหัส 6 ตัวที่ใช้เปิดห้องนี้'}">
-          <small class="tgg-hint">เมื่อล็อก ต้องใส่รหัสก่อนเปิดห้องแชทนี้ทุกครั้ง</small>
-        </div>
-      </section>`}
+      ${tggLockSection(group)}
 
       <section class="tgg-tagbox">
         <div class="tgg-tagbox-head">
@@ -165,8 +158,7 @@ function groupForm(group, bots, focusBot) {
           tggRenderTags(modal);
         }
       });
-      const lockOn = modal.querySelector('[name="lockOn"]');
-      if (lockOn) lockOn.addEventListener('change', () => { modal.querySelector('.tgg-lock-pin').hidden = !lockOn.checked; });
+      tggLockBind(modal);
       const focusTarget = modal.querySelector('[data-focus="1"]');
       if (focusTarget) setTimeout(() => focusTarget.focus(), 40);
     },
@@ -180,13 +172,8 @@ FORMS['tg-group'] = async (form) => {
   const btn = form.querySelector('[type="submit"]');
   const nextBot = fd.get('botId') || '';
   const tagPayload = tggTags.map((t) => ({ name: t.name, color: t.color }));
-  // Room lock (edit only): turning it on needs a 6-digit PIN; turning it off removes it; a blank PIN keeps the old one.
-  const lockOn = fd.get('lockOn') === 'on';
-  const lockPin = String(fd.get('lockPin') || '').trim();
-  const wasLocked = form.dataset.locked === '1';
-  if (id && lockOn && lockPin && !/^\d{6}$/.test(lockPin)) { setFormError(form, 'รหัสล็อกต้องเป็นตัวเลข 6 หลัก'); return; }
-  if (id && lockOn && !wasLocked && !lockPin) { setFormError(form, 'กรุณาตั้งรหัสล็อก 6 หลัก'); return; }
-  const lockExtra = !id ? {} : lockOn ? (lockPin ? { lockPin } : {}) : (wasLocked ? { lockOff: true } : {});
+  const lock = tggLockPayload(form, form.dataset.locked === '1');
+  if (lock.error) { setFormError(form, lock.error); return; }
   try {
     let groupId = id;
     if (id) {
@@ -195,7 +182,7 @@ FORMS['tg-group'] = async (form) => {
         enabled: fd.get('enabled') === 'on',
         autoReply: fd.get('autoReply') === 'on',
         botId: nextBot || null,
-        ...lockExtra,
+        ...lock.body,
       }));
     } else {
       const created = await busy(btn, () => apiPost('/api/telegram/groups', {
@@ -205,6 +192,7 @@ FORMS['tg-group'] = async (form) => {
         enabled: fd.get('enabled') === 'on',
       }));
       groupId = created.id;
+      if (lock.body.lockPin) await apiPatch('/api/telegram/groups/' + groupId, { lockPin: lock.body.lockPin });
     }
     await apiPut(`/api/telegram/groups/${groupId}/tags`, { tags: tagPayload });
     closeAllModals();
@@ -236,6 +224,7 @@ function renderChatLocked(chats, mentions, active) {
         <p class="pin-error" data-role="pin-error" role="alert"></p>
         <button type="button" class="pin-submit" data-action="pin-submit">ยืนยัน</button>
         <button type="button" class="pin-forgot" data-action="pin-forgot">ลืมรหัส?</button>
+        <button type="button" class="pin-cancel" data-action="pin-cancel">ยกเลิก</button>
       </div>
     </section>
   </div>`);
@@ -324,3 +313,139 @@ document.addEventListener('paste', (e) => {
   if (last) last.focus();
   if (digits.length === 6) pinSubmit();
 });
+
+// ---------------------------------------------------------------- room lock: switch, popup section, PIN rules
+function tgGroupLockSwitch(g) {
+  return `<button type="button" class="tgg-switch tgg-switch-lock" role="switch" aria-checked="${g.locked ? 'true' : 'false'}"
+    data-action="tg-group-lock" data-id="${esc(g.id)}" aria-label="ล็อกห้องแชท"
+    title="${g.locked ? 'ล็อกอยู่ กดเพื่อปิดการล็อก' : 'กดเพื่อล็อกห้องแชทด้วยรหัส 6 หลัก'}"><span class="knob">${icon('lock', 'sm')}</span></button>`;
+}
+
+function tggPinField(name, label) {
+  return `<label class="field tgg-pin-field"><span>${label}</span>
+    <input class="input" name="${name}" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off"></label>`;
+}
+
+// Same section for add and edit. Fields show only when they are needed (see tggLockBind).
+function tggLockSection(group) {
+  const locked = !!(group && group.locked);
+  return `<section class="tgg-lock">
+    <div class="tgg-lock-row">
+      <div class="tgg-lock-text"><b>การล็อกห้องแชท</b>
+        <small class="tgg-hint">${locked ? '🔒 ล็อกอยู่ ต้องใส่รหัส 6 หลักก่อนเข้าห้องแชท' : '🔓 ไม่ได้ล็อก เข้าห้องแชทได้ตามสิทธิ์ปกติ'}</small></div>
+      <label class="tgg-switch"><input type="checkbox" name="lockOn" ${locked ? 'checked' : ''}><span class="knob">${icon('lock', 'sm')}</span></label>
+    </div>
+    ${locked ? '<label class="tgg-check tgg-change"><input type="checkbox" name="changePin"> เปลี่ยนรหัสห้องแชท</label>' : ''}
+    <div class="tgg-lock-fields">
+      <div data-role="lock-current" hidden>${tggPinField('currentPin', 'รหัสเดิม 6 หลัก')}</div>
+      <div data-role="lock-new" hidden>
+        ${tggPinField('newPin', 'ตั้งรหัสห้องแชท 6 หลัก')}
+        ${tggPinField('confirmPin', 'ยืนยันรหัสห้องแชท 6 หลัก')}
+      </div>
+    </div>
+  </section>`;
+}
+
+// Shows only the fields that are needed for the current choice.
+function tggLockBind(modal) {
+  const form = modal.querySelector('form.tgg-form');
+  if (!form) return;
+  const sync = () => {
+    const wasLocked = form.dataset.locked === '1';
+    const on = form.querySelector('[name="lockOn"]').checked;
+    const changeBox = form.querySelector('[name="changePin"]');
+    const changing = wasLocked && !!(changeBox && changeBox.checked);
+    if (changeBox) changeBox.closest('.tgg-change').hidden = !(on && wasLocked);
+    form.querySelector('[data-role="lock-current"]').hidden = !((on && changing) || (!on && wasLocked));
+    form.querySelector('[data-role="lock-new"]').hidden = !(on && (!wasLocked || changing));
+  };
+  form.addEventListener('change', sync);
+  sync();
+}
+
+// Builds the lock part of the save request and checks what the user typed.
+function tggLockPayload(form, wasLocked) {
+  const fd = new FormData(form);
+  const on = fd.get('lockOn') === 'on';
+  const current = String(fd.get('currentPin') || '').trim();
+  const pin = String(fd.get('newPin') || '').trim();
+  const confirm = String(fd.get('confirmPin') || '').trim();
+  const changing = fd.get('changePin') === 'on';
+  if (!on) {
+    if (!wasLocked) return { body: {} };
+    if (!/^\d{6}$/.test(current)) return { error: 'กรุณาใส่รหัสเดิม 6 หลักเพื่อปิดการล็อก' };
+    return { body: { lockOff: true, currentPin: current } };
+  }
+  if (wasLocked && !changing) return { body: {} };
+  if (!/^\d{6}$/.test(pin)) return { error: 'รหัสห้องแชทต้องเป็นตัวเลข 6 หลัก' };
+  if (pin !== confirm) return { error: 'รหัสยืนยันไม่ตรงกับรหัสที่ตั้ง' };
+  if (wasLocked) {
+    if (!/^\d{6}$/.test(current)) return { error: 'กรุณาใส่รหัสเดิม 6 หลักเพื่อเปลี่ยนรหัส' };
+    return { body: { lockPin: pin, currentPin: current } };
+  }
+  return { body: { lockPin: pin } };
+}
+
+// The switch on a card: turning it on asks for a new PIN, turning it off asks for the current PIN.
+ACTIONS['tg-group-lock'] = async (el) => {
+  const id = el.dataset.id;
+  const { items } = await apiGet('/api/telegram/groups');
+  const g = items.find((x) => x.id === id);
+  if (!g) return;
+  if (g.locked) {
+    openModal({
+      title: 'ปิดการล็อกห้องแชท',
+      body: `<form data-form="tg-lock-off" data-id="${esc(id)}" class="stack">
+        <p class="muted small">ใส่รหัสเดิมเพื่อยืนยันการปิดการล็อก</p>
+        ${tggPinField('currentPin', 'รหัสเดิม 6 หลัก')}
+        <p class="small" data-role="form-error"></p>
+        <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-action="close-modal">ยกเลิก</button>
+          <button type="submit" class="btn primary">ยืนยันปิดการล็อก</button></div>
+      </form>`,
+    });
+  } else {
+    openModal({
+      title: 'ล็อกห้องแชท',
+      body: `<form data-form="tg-lock-set" data-id="${esc(id)}" class="stack">
+        <p class="muted small">ตั้งรหัส 6 หลักที่ใช้เปิดห้องแชทนี้</p>
+        ${tggPinField('newPin', 'ตั้งรหัสห้องแชท 6 หลัก')}
+        ${tggPinField('confirmPin', 'ยืนยันรหัสห้องแชท 6 หลัก')}
+        <p class="small" data-role="form-error"></p>
+        <div class="row" style="justify-content:flex-end"><button type="button" class="btn ghost" data-action="close-modal">ยกเลิก</button>
+          <button type="submit" class="btn primary">บันทึกการล็อก</button></div>
+      </form>`,
+    });
+  }
+};
+FORMS['tg-lock-set'] = async (form) => {
+  const pin = form.querySelector('[name="newPin"]').value.trim();
+  const confirm = form.querySelector('[name="confirmPin"]').value.trim();
+  if (!/^\d{6}$/.test(pin)) { setFormError(form, 'รหัสห้องแชทต้องเป็นตัวเลข 6 หลัก'); return; }
+  if (pin !== confirm) { setFormError(form, 'รหัสยืนยันไม่ตรงกับรหัสที่ตั้ง'); return; }
+  const btn = form.querySelector('[type="submit"]');
+  try {
+    await busy(btn, () => apiPatch('/api/telegram/groups/' + form.dataset.id, { lockPin: pin }));
+    closeAllModals();
+    toast('ล็อกห้องแชทแล้ว');
+    tgPanel();
+  } catch (err) { setFormError(form, err.message); }
+};
+FORMS['tg-lock-off'] = async (form) => {
+  const currentPin = form.querySelector('[name="currentPin"]').value.trim();
+  if (!/^\d{6}$/.test(currentPin)) { setFormError(form, 'กรุณาใส่รหัสเดิม 6 หลัก'); return; }
+  const btn = form.querySelector('[type="submit"]');
+  try {
+    await busy(btn, () => apiPatch('/api/telegram/groups/' + form.dataset.id, { lockOff: true, currentPin }));
+    closeAllModals();
+    toast('ปิดการล็อกห้องแชทแล้ว');
+    tgPanel();
+  } catch (err) { setFormError(form, err.message); }
+};
+
+// Cancel on the PIN screen: go to a room that is open, if there is one.
+ACTIONS['pin-cancel'] = async () => {
+  const { items: chats } = await apiGet('/api/telegram/chats');
+  const open = chats.find((c) => !c.locked || c.unlocked);
+  if (open) renderChat({ group: open.id });
+  else setPinError('ไม่มีห้องแชทที่เปิดได้ในตอนนี้');
+};

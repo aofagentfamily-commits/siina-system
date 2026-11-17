@@ -272,13 +272,13 @@ function setGroupTags(user, groupId, list) {
 const UNLOCK_TTL_MS = 2 * 60 * 60 * 1000;
 const TRIES_MAX = 5;
 const TRIES_WAIT_MS = 5 * 60 * 1000;
-const unlockedUntil = new Map(); // `${userId}:${groupId}` -> time the room stays open
+const activeUnlock = new Map();  // userId -> { groupId, until }: one room is open per account at a time
 const failedTries = new Map();   // same key -> { count, waitUntil }
 const lockKey = (userId, groupId) => `${userId}:${groupId}`;
 
 function isUnlocked(userId, groupId) {
-  const t = unlockedUntil.get(lockKey(userId, groupId));
-  return !!t && t > Date.now();
+  const e = activeUnlock.get(userId);
+  return !!e && e.groupId === groupId && e.until > Date.now();
 }
 function lockedGroupIds(userId) {
   return new Set(db.prepare('SELECT id FROM telegram_groups WHERE user_id = ? AND lock_hash IS NOT NULL').all(userId)
@@ -299,11 +299,13 @@ function failTry(key, message, code) {
   throw new u.HttpError(403, `${message} (เหลือ ${TRIES_MAX - t.count} ครั้ง)`, code);
 }
 function grantUnlock(userId, groupId) {
-  unlockedUntil.set(lockKey(userId, groupId), Date.now() + UNLOCK_TTL_MS);
+  activeUnlock.set(userId, { groupId, until: Date.now() + UNLOCK_TTL_MS });
   failedTries.delete(lockKey(userId, groupId));
 }
 // A locked room refuses reading and sending until it is unlocked. Returns the group for chaining.
 function assertUnlocked(user, g) {
+  const e = activeUnlock.get(user.id);
+  if (e && e.groupId !== g.id) activeUnlock.delete(user.id); // opening another room re-locks the last one
   if (g.lock_hash && !isUnlocked(user.id, g.id)) throw new u.HttpError(423, 'ห้องแชทนี้ถูกล็อก กรุณาใส่รหัสก่อน', 'LOCKED');
   return g;
 }
@@ -312,6 +314,23 @@ function hashPin(pin) {
   if (!/^\d{6}$/.test(value)) throw new u.HttpError(400, 'รหัสล็อกต้องเป็นตัวเลข 6 หลัก', 'VALIDATION');
   return auth.hashPassword(value);
 }
+// Turning the lock off or changing the PIN needs the current PIN (or the account password).
+function confirmLockOwner(user, g, body) {
+  const key = lockKey(user.id, g.id);
+  checkTries(key);
+  const current = body.currentPin != null ? String(body.currentPin) : '';
+  const password = body.password != null ? String(body.password) : '';
+  if (current) {
+    if (!auth.verifyPassword(current, g.lock_hash)) failTry(key, 'รหัสเดิมไม่ถูกต้อง', 'BAD_PIN');
+  } else if (password) {
+    const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id);
+    if (!auth.verifyPassword(password, row && row.password_hash)) failTry(key, 'รหัสผ่านบัญชีไม่ถูกต้อง', 'BAD_PASSWORD');
+  } else {
+    throw new u.HttpError(403, 'กรุณายืนยันรหัสเดิมก่อนเปลี่ยนหรือปิดการล็อก', 'NEED_PIN');
+  }
+  failedTries.delete(key);
+}
+
 function unlockGroup(user, id, pin) {
   const g = getGroup(user, id);
   if (!g.lock_hash) return { ok: true };
@@ -365,10 +384,15 @@ function updateGroup(user, id, body) {
   const autoReply = body.autoReply != null ? (u.bool(body.autoReply) ? 1 : 0) : g.auto_reply;
   const avatar = 'avatarData' in body ? avatarOrThrow(body.avatarData, 'รูปกลุ่ม') : g.avatar_data;
   // lockOff removes the PIN; a 6-digit lockPin sets or changes it; otherwise the current PIN stays.
+  const changingLock = body.lockOff === true || (body.lockPin != null && String(body.lockPin).trim() !== '');
+  if (g.lock_hash && changingLock) confirmLockOwner(user, g, body);
   let lockHash = g.lock_hash;
   if (body.lockOff === true) lockHash = null;
   else if (body.lockPin != null && String(body.lockPin).trim() !== '') lockHash = hashPin(body.lockPin);
-  if (lockHash !== g.lock_hash) unlockedUntil.delete(lockKey(user.id, g.id));
+  if (lockHash !== g.lock_hash) {
+    const e = activeUnlock.get(user.id);
+    if (e && e.groupId === g.id) activeUnlock.delete(user.id);
+  }
   let botId = g.bot_id;
   let status = g.status;
   let lastError = g.last_error;
